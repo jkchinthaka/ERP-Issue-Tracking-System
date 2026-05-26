@@ -9,7 +9,7 @@ export async function generateIssueId() {
       $inc: { "value.sequence": 1 },
       $setOnInsert: { description: `Issue ID counter for ${year}` },
     },
-    { upsert: true, new: true, lean: true },
+    { upsert: true, returnDocument: "after", lean: true },
   );
 
   const value = counter?.value as { sequence?: number } | undefined;
@@ -24,7 +24,7 @@ export async function generateActionId() {
       $inc: { "value.sequence": 1 },
       $setOnInsert: { description: `Improvement action counter for ${year}` },
     },
-    { upsert: true, new: true, lean: true },
+    { upsert: true, returnDocument: "after", lean: true },
   );
 
   const value = counter?.value as { sequence?: number } | undefined;

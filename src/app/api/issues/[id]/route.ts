@@ -114,13 +114,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       throw new ApiError("No valid changes were submitted.", 400);
     }
 
-    const updated = await Issue.findOneAndUpdate(issueIdentityFilter(id), { $set: updates }, { new: true }).populate(issuePopulate).lean();
+    const updated = await Issue.findOneAndUpdate(issueIdentityFilter(id), { $set: updates }, { returnDocument: "after" }).populate(issuePopulate).lean();
 
     if (updates.vendorRequired && updates.vendorId) {
       await VendorFollowup.findOneAndUpdate(
         { issueId: current._id, vendorId: updates.vendorId },
         { $setOnInsert: { issueId: current._id, vendorId: updates.vendorId, vendorStatus: "Sent to Vendor", sentDate: now, createdBy: user.id } },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: "after" },
       );
     }
 

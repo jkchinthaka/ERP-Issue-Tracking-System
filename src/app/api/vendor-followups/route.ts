@@ -81,7 +81,7 @@ export async function PATCH(request: NextRequest) {
       nextFollowupDate: body.nextFollowupDate ? new Date(String(body.nextFollowupDate)) : current.nextFollowupDate,
       pendingDays: getPendingDays(current.sentDate as Date),
     };
-    const updated = await VendorFollowup.findByIdAndUpdate(followupId, { $set: updates }, { new: true }).populate({ path: "vendorId", select: "vendorName contactPerson email" }).lean();
+    const updated = await VendorFollowup.findByIdAndUpdate(followupId, { $set: updates }, { returnDocument: "after" }).populate({ path: "vendorId", select: "vendorName contactPerson email" }).lean();
     await createAuditLog({ entityType: "VendorFollowup", entityId: followupId, action: "Vendor status changed", oldValue: current, newValue: updates, performedBy: user.id, request });
     return ok({ followup: serialize(updated) });
   } catch (error) {

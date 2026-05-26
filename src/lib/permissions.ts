@@ -1,4 +1,3 @@
-import type { FilterQuery } from "mongoose";
 import type { Permission } from "./constants";
 import { toId } from "./utils";
 
@@ -37,7 +36,7 @@ export function canAccessIssue(user: AuthenticatedUser, issue: Record<string, un
   return false;
 }
 
-export function visibleIssueFilter(user: AuthenticatedUser): FilterQuery<unknown> {
+export function visibleIssueFilter(user: AuthenticatedUser): Record<string, unknown> {
   if (hasPermission(user, "view_all_issues")) {
     return { isDeleted: false };
   }

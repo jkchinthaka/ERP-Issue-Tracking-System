@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { fail, ok, parseSearch } from "@/lib/api";
 import { ApiError, requireAuth } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
-import { Attachment, Department, ErpModule, Issue, User, Vendor } from "@/lib/models";
+import { Attachment, Department, ErpModule, Issue, User } from "@/lib/models";
 import { issuePopulate } from "@/lib/queries";
 import { visibleIssueFilter } from "@/lib/permissions";
 import { calculateSla, priorityFromImpact } from "@/lib/sla";

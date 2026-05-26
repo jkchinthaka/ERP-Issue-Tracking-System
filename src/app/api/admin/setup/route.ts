@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
             isActive: true,
           },
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: "after" },
       );
     } else if (type === "role") {
       if (!hasPermission(user, "manage_settings")) throw new ApiError("You do not have permission to access this page.", 403);

@@ -33,7 +33,7 @@ async function upsertRole(roleName: string, description: string) {
   return Role.findOneAndUpdate(
     { roleName },
     { $set: { roleName, description, permissions: ROLE_PERMISSIONS[roleName] ?? [] } },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: "after" },
   );
 }
 
@@ -58,7 +58,7 @@ async function upsertUser(input: {
     isActive: true,
   };
 
-  if (existing) return User.findByIdAndUpdate(existing._id, { $set: payload }, { new: true });
+  if (existing) return User.findByIdAndUpdate(existing._id, { $set: payload }, { returnDocument: "after" });
   return User.create({ ...payload, passwordHash: await hashPassword(input.password) });
 }
 
@@ -79,7 +79,7 @@ async function main() {
 
   const departments = new Map<string, string>();
   for (const name of DEFAULT_DEPARTMENTS) {
-    const department = await Department.findOneAndUpdate({ name }, { $set: { name, isActive: true } }, { upsert: true, new: true });
+    const department = await Department.findOneAndUpdate({ name }, { $set: { name, isActive: true } }, { upsert: true, returnDocument: "after" });
     departments.set(name, toId(department._id));
   }
 
@@ -88,7 +88,7 @@ async function main() {
     const erpModule = await ErpModule.findOneAndUpdate(
       { moduleName },
       { $set: { moduleName, description: `${moduleName} ERP support area`, isActive: true } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: "after" },
     );
     modules.set(moduleName, toId(erpModule._id));
   }
@@ -96,17 +96,17 @@ async function main() {
   const vendor = await Vendor.findOneAndUpdate(
     { vendorName: "Bileeta" },
     { $set: { vendorName: "Bileeta", contactPerson: "Bileeta Support", email: "support@bileeta.local", phone: "+94 11 000 0000", isActive: true } },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: "after" },
   );
 
   for (const rule of SLA_RULES) {
-    await SlaRule.findOneAndUpdate({ priority: rule.priority }, { $set: { ...rule, isActive: true } }, { upsert: true, new: true });
+    await SlaRule.findOneAndUpdate({ priority: rule.priority }, { $set: { ...rule, isActive: true } }, { upsert: true, returnDocument: "after" });
   }
 
   await Setting.findOneAndUpdate(
     { key: "defaultItRecipients" },
     { $set: { value: DEFAULT_IT_RECIPIENTS, description: "Default ERP issue email recipients" } },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: "after" },
   );
 
   const admin = await upsertUser({
@@ -134,6 +134,8 @@ async function main() {
   await KnowledgeBase.deleteMany({});
   await ImprovementAction.deleteMany({});
   await Notification.deleteMany({});
+  await EmailLog.deleteMany({ body: "Seeded email log for dashboard testing." });
+  await AuditLog.deleteMany({ entityType: "System", entityId: "seed" });
 
   const year = new Date().getFullYear();
   const sampleIssues = [
@@ -190,8 +192,8 @@ async function main() {
   await EmailLog.create({ issueId: savedIssues[0]._id, to: DEFAULT_IT_RECIPIENTS.map((person) => person.email), cc: [String(manager?.email)], subject: `[ERP Issue] High - Stores - Stock balance report not matching - ${savedIssues[0].issueId}`, body: "Seeded email log for dashboard testing.", status: "Sent", sentAt: new Date(Date.now() - 7 * 86400000) });
   await AuditLog.create({ logId: `AUD-${year}-SEED-0001`, entityType: "System", entityId: "seed", action: "Seed data loaded", newValue: { users: 8, issues: savedIssues.length }, performedBy: admin?._id, performedAt: new Date() });
 
-  await Setting.findOneAndUpdate({ key: `issueCounter.${year}` }, { $set: { value: { sequence: 5 }, description: `Issue ID counter for ${year}` } }, { upsert: true, new: true });
-  await Setting.findOneAndUpdate({ key: `improvementActionCounter.${year}` }, { $set: { value: { sequence: 2 }, description: `Improvement action counter for ${year}` } }, { upsert: true, new: true });
+  await Setting.findOneAndUpdate({ key: `issueCounter.${year}` }, { $set: { value: { sequence: 5 }, description: `Issue ID counter for ${year}` } }, { upsert: true, returnDocument: "after" });
+  await Setting.findOneAndUpdate({ key: `improvementActionCounter.${year}` }, { $set: { value: { sequence: 2 }, description: `Improvement action counter for ${year}` } }, { upsert: true, returnDocument: "after" });
 
   console.log("Seed completed for Nelna ERP Support & Improvement System.");
   console.table([
