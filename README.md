@@ -57,6 +57,10 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Deployment
+
+This is a full-stack Node.js Next.js app, not a static Cloudflare Pages site. For the Cloudflare Pages 404 explanation and the correct production hosting options, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Default Test Users
 
 Passwords come from `.env`, not source code.

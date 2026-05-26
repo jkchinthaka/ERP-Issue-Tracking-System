@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: nelna-erp-support
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_NAME
+        value: bileeta_db
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: DEFAULT_ADMIN_NAME
+        value: Super Admin
+      - key: DEFAULT_ADMIN_EMAIL
+        value: admin@nelna.local
+      - key: DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_USER_PASSWORD
+        sync: false
+      - key: DEFAULT_IT_EMAILS
+        value: pathum@nelna.local,sampath@nelna.local,rusith@nelna.local,chinthaka@nelna.local
+      - key: EMAIL_FROM
+        value: Nelna ERP Support <erp-support@nelna.local>
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
