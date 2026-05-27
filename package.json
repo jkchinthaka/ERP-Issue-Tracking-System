@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.19.11",
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.3.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.0",
