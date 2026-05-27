@@ -13,7 +13,7 @@ Internal ERP issue tracking, vendor follow-up, SLA monitoring, department impact
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22 LTS with npm 10
 - MongoDB running locally with database `bileeta_db`
 - MongoDB user with access to `bileeta_db`
 

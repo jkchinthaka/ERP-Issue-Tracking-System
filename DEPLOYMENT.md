@@ -60,10 +60,12 @@ Important: `localhost` inside a cloud server means that same cloud server. For p
 
 This repository includes `render.yaml` for a Node web service.
 
+If an existing Render service still shows `yarn` as the build command, update the service settings or redeploy from the blueprint so it uses the npm commands below.
+
 Use:
 
 ```bash
-npm ci
+npm ci --include=dev
 npm run build
 npm run start
 ```
