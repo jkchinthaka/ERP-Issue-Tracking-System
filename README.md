@@ -110,6 +110,26 @@ Open `http://localhost:3000`.
 
 This is a full-stack Node.js Next.js app, not a static Cloudflare Pages site. For the Cloudflare Pages 404 explanation and the correct production hosting options, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
+### Cloudflare Workers with OpenNext
+
+Deploy this app to Cloudflare Workers with the OpenNext Cloudflare adapter. Do not use `.next` as a Cloudflare Pages output directory; `.next` is not a static deployable folder and can fail asset validation.
+
+Cloudflare Worker configuration lives in `wrangler.jsonc`. The Worker name and `WORKER_SELF_REFERENCE` service binding must both stay:
+
+```text
+erp-issue-tracking-system
+```
+
+Use:
+
+```bash
+npm install
+npm run build
+npm run deploy
+```
+
+For a Cloudflare dashboard/Git deployment, use the Workers/OpenNext path and set the deploy command to `npm run deploy`. The OpenNext build emits the Worker bundle to `.open-next/worker.js` and assets to `.open-next/assets`.
+
 ## Default Test Users
 
 Passwords come from `.env`, not source code.

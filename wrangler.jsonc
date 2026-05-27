@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "nelna-erp-support",
+  "name": "erp-issue-tracking-system",
   "main": ".open-next/worker.js",
   "workers_dev": true,
   "preview_urls": true,
@@ -13,7 +13,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "nelna-erp-support"
+      "service": "erp-issue-tracking-system"
     }
   ],
   "observability": {

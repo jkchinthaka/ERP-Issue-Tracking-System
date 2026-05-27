@@ -132,7 +132,7 @@ Use the committed OpenNext files:
 - `wrangler.jsonc`
 - `open-next.config.ts`
 
-The Worker name and self-reference service binding must both stay `nelna-erp-support`.
+The Worker name and self-reference service binding must both stay `erp-issue-tracking-system`.
 
 Use these commands:
 
