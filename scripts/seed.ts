@@ -63,7 +63,7 @@ async function upsertUser(input: {
 }
 
 async function main() {
-  requireEnv("DATABASE_URL");
+  requireEnv("MAIN_DATABASE_URL");
   const adminPassword = requireEnv("DEFAULT_ADMIN_PASSWORD");
   const demoPassword = requireEnv("DEMO_USER_PASSWORD");
   await connectToDatabase();

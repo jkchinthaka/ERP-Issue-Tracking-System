@@ -9,12 +9,6 @@ declare global {
     | undefined;
 }
 
-const databaseUrl = process.env.DATABASE_URL ?? "";
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is not configured. Add it to .env before starting the app.");
-}
-
 const cached = global.nelnaMongoose ?? { conn: null, promise: null };
 
 if (!global.nelnaMongoose) {
@@ -26,9 +20,15 @@ export async function connectToDatabase() {
     return cached.conn;
   }
 
+  const databaseUrl = process.env.MAIN_DATABASE_URL ?? "";
+
+  if (!databaseUrl) {
+    throw new Error("MAIN_DATABASE_URL is not configured. Add the MongoDB Atlas connection string before starting the app.");
+  }
+
   if (!cached.promise) {
     cached.promise = mongoose.connect(databaseUrl, {
-      dbName: process.env.DATABASE_NAME || "bileeta_db",
+      dbName: "nelna",
       autoIndex: process.env.NODE_ENV !== "production",
     });
   }

@@ -10,11 +10,11 @@ services:
         value: 22.14.0
       - key: NODE_ENV
         value: production
-      - key: DATABASE_NAME
-        value: bileeta_db
-      - key: DATABASE_URL
+      - key: MAIN_DATABASE_URL
         sync: false
       - key: JWT_SECRET
+        sync: false
+      - key: APP_URL
         sync: false
       - key: DEFAULT_ADMIN_NAME
         value: Super Admin

@@ -38,12 +38,12 @@ Deploy this MVP to a Node.js-compatible host such as:
 - AWS EC2 / Lightsail
 - Docker on a company server
 
-Set these environment variables in the production host:
+Set these environment variables in the production host. Atlas is the source of truth for the hosted app:
 
 ```env
-DATABASE_NAME=bileeta_db
-DATABASE_URL="mongodb://USER:PASSWORD@HOST:27017/bileeta_db?authSource=bileeta_db"
+MAIN_DATABASE_URL="mongodb+srv://USERNAME:PASSWORD@nelna.o6tqdh4.mongodb.net/nelna?retryWrites=true&w=majority&appName=Nelna"
 JWT_SECRET="long-random-production-secret"
+APP_URL="https://your-app-url"
 DEFAULT_ADMIN_EMAIL="admin@nelna.local"
 DEFAULT_ADMIN_PASSWORD="strong-admin-password"
 DEMO_USER_PASSWORD="strong-demo-password"
@@ -54,7 +54,7 @@ SMTP_USER="erp-support@nelna.com"
 SMTP_PASS="smtp-password-or-app-password"
 ```
 
-Important: `localhost` inside a cloud server means that same cloud server. For production, use a MongoDB instance reachable from the deployed app, such as a company MongoDB server or MongoDB Atlas.
+Important: `localhost` inside a cloud server means that same cloud server. The hosted app must not use `BACKUP_DATABASE_URL` or depend on the company server MongoDB backup mirror.
 
 ## Render Deployment
 
@@ -76,6 +76,8 @@ Run the seed command once after environment variables and MongoDB are ready:
 npm run seed
 ```
 
+The seed command writes to Atlas through `MAIN_DATABASE_URL`.
+
 ### Render Outbound IP Allowlist
 
 Render network requests from this service to public services can come from either of these shared outbound ranges:
@@ -85,9 +87,30 @@ Render network requests from this service to public services can come from eithe
 74.220.57.0/24
 ```
 
-Allowlist both ranges on any external service that restricts inbound connections from the deployed app. For MongoDB Atlas, open **Network Access**, choose **Add IP Address**, add each CIDR range above, and save. For a company-hosted MongoDB server, ask the network or firewall administrator to allow inbound MongoDB traffic from both ranges to the database host and port.
+Allowlist both ranges on any external service that restricts inbound connections from the deployed app. For MongoDB Atlas, open **Network Access**, choose **Add IP Address**, add each CIDR range above, and save. Do not use these ranges to make the hosted app connect to the local backup database; the backup sync runs separately on the company server.
 
 These ranges are shared with other Render services in the same region. If the database or security policy requires a unique static outbound IP, configure a Render Dedicated IP and allowlist that dedicated address instead.
+
+## Company Server Backup Mirror
+
+Run the backup worker only on the company server where local MongoDB is reachable as `localhost`. Set:
+
+```env
+MAIN_DATABASE_URL="mongodb+srv://USERNAME:PASSWORD@nelna.o6tqdh4.mongodb.net/nelna?retryWrites=true&w=majority&appName=Nelna"
+BACKUP_DATABASE_URL="mongodb://USERNAME:PASSWORD@localhost:27017/bileeta_db?authSource=bileeta_db"
+BACKUP_SYNC_MODE="pull"
+BACKUP_SYNC_INTERVAL_MINUTES="5"
+```
+
+Commands:
+
+```bash
+npm run db:backup:full
+npm run db:backup:incremental
+npm run db:backup:status
+```
+
+Use Windows Task Scheduler, PM2, or cron to run `npm run db:backup:incremental` every 5 minutes. The worker pulls Atlas data into local `bileeta_db`, preserves `_id`, uses upserts, and never writes local backup data back to Atlas.
 
 ## Docker Deployment
 

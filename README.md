@@ -14,8 +14,8 @@ Internal ERP issue tracking, vendor follow-up, SLA monitoring, department impact
 ## Requirements
 
 - Node.js 22 LTS with npm 10
-- MongoDB running locally with database `bileeta_db`
-- MongoDB user with access to `bileeta_db`
+- MongoDB Atlas database `nelna` for the hosted production app
+- Optional company server MongoDB database `bileeta_db` for the backup mirror worker
 
 ## Install
 
@@ -23,31 +23,80 @@ Internal ERP issue tracking, vendor follow-up, SLA monitoring, department impact
 npm install
 ```
 
-## Environment
+## Database Architecture
 
-Copy `.env.example` to `.env` and update the values. The local development `.env` in this workspace already contains the requested MongoDB URL and is ignored by Git.
+MongoDB Atlas is the production source of truth. The hosted ERP app on Render or Cloudflare connects only to Atlas through `MAIN_DATABASE_URL` and uses database `nelna`.
 
-Required local MongoDB URL:
+The company server MongoDB database `bileeta_db` is only a backup mirror. The hosted app never connects to `BACKUP_DATABASE_URL`, never writes backup data during API requests, and keeps working if the local backup database is offline.
 
-```env
-DATABASE_URL="mongodb://bileeta_user:Bil3eta%40123@localhost:27017/bileeta_db?authSource=bileeta_db"
-```
+## Hosted App Environment
 
-Replica set option:
+Set these variables on Render or the Node-compatible hosting environment:
 
 ```env
-DATABASE_URL="mongodb://bileeta_user:Bil3eta%40123@localhost:27017/bileeta_db?authSource=bileeta_db&replicaSet=rs0"
+MAIN_DATABASE_URL="mongodb+srv://USERNAME:PASSWORD@nelna.o6tqdh4.mongodb.net/nelna?retryWrites=true&w=majority&appName=Nelna"
+JWT_SECRET="your-secure-secret"
+APP_URL="https://your-app-url"
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="587"
+SMTP_USER="your-email"
+SMTP_PASS="your-email-password"
 ```
+
+Do not set `BACKUP_DATABASE_URL` on the hosted app. Render or Cloudflare `localhost` is not the company server.
 
 SMTP is optional for local testing. If SMTP values are empty, issues are still saved and email failures are logged in `emailLogs`.
 
-## Seed MongoDB
+## Company Server Backup Worker Environment
+
+On the company server where local MongoDB is reachable, copy `.env.example` to `.env` and set:
+
+```env
+MAIN_DATABASE_URL="mongodb+srv://USERNAME:PASSWORD@nelna.o6tqdh4.mongodb.net/nelna?retryWrites=true&w=majority&appName=Nelna"
+BACKUP_DATABASE_URL="mongodb://USERNAME:PASSWORD@localhost:27017/bileeta_db?authSource=bileeta_db"
+BACKUP_SYNC_MODE="pull"
+BACKUP_SYNC_INTERVAL_MINUTES="5"
+```
+
+The worker only pulls from Atlas into local `bileeta_db`. It never writes local backup data back to Atlas.
+
+## Seed Atlas MongoDB
 
 ```bash
 npm run seed
 ```
 
-The seed script creates roles, permissions, departments, ERP modules, SLA rules, Bileeta vendor data, users, sample issues, vendor follow-ups, knowledge base articles, improvement actions, audit logs, and email logs.
+The seed script uses `MAIN_DATABASE_URL` and creates roles, permissions, departments, ERP modules, SLA rules, Bileeta vendor data, users, sample issues, vendor follow-ups, knowledge base articles, improvement actions, audit logs, and email logs in Atlas. Do not run it against production data unless you intentionally want the seed records.
+
+## Backup Mirror Commands
+
+Run these commands on the company server, not on Render or Cloudflare:
+
+```bash
+npm run db:backup:full
+npm run db:backup:incremental
+npm run db:backup:status
+```
+
+`db:backup:full` copies all configured collections from Atlas `nelna` to local `bileeta_db` using upserts and preserving `_id` values.
+
+`db:backup:incremental` uses local `syncState.lastSyncAt` and pulls only documents with `updatedAt` newer than the last successful sync. Collections without `updatedAt` are copied fully each run.
+
+`db:backup:status` checks Atlas and local backup connectivity, last sync time, last sync status, collections synced, and failed document counts.
+
+For a continuous worker with PM2:
+
+```bash
+pm2 start "npm run db:backup:incremental -- --watch" --name nelna-erp-backup-sync
+```
+
+For Windows Task Scheduler, create a task that runs every 5 minutes with:
+
+```text
+Program/script: npm
+Arguments: run db:backup:incremental
+Start in: C:\path\to\ERP-Issue-Tracking-System
+```
 
 ## Run Development Server
 
@@ -81,12 +130,17 @@ npm run lint
 npm run typecheck
 npm run build
 npm run seed
+npm run db:backup:full
+npm run db:backup:incremental
+npm run db:backup:status
 ```
 
 ## Security Notes
 
-- `DATABASE_URL`, SMTP credentials, JWT secret, and passwords are read from environment variables only.
+- `MAIN_DATABASE_URL`, `BACKUP_DATABASE_URL`, SMTP credentials, JWT secret, and passwords are read from environment variables only.
 - `.env` is ignored by Git; `.env.example` contains placeholders only.
+- Do not expose the local MongoDB backup port publicly unless it is explicitly required and protected by firewall/VPN rules.
+- Atlas is the source of truth; local `bileeta_db` is only a backup mirror.
 - Passwords are hashed with bcrypt.
 - API routes enforce session authentication and permission checks.
 - Important records use soft delete.
