@@ -123,8 +123,35 @@ docker build -t nelna-erp-support .
 docker run -p 3000:3000 --env-file .env nelna-erp-support
 ```
 
-## If Cloudflare Must Be Used
+## Cloudflare Workers Deployment
 
-Use Cloudflare only for DNS or as a reverse proxy in front of a Node-hosted app.
+This app can run on Cloudflare Workers through OpenNext. It must not be deployed as a plain Cloudflare Pages static site with `.next` as the output directory. That setup can fail with `build output directory contains links to files that can't be accessed`, and it will not run the API routes correctly.
 
-Cloudflare Pages can host a separate static frontend, but the backend APIs must still run somewhere Node-compatible. To run everything on Cloudflare Workers, the backend must be redesigned to use Workers-compatible services instead of direct Mongoose TCP MongoDB, SMTP, and local file writes.
+Use the committed OpenNext files:
+
+- `wrangler.jsonc`
+- `open-next.config.ts`
+
+The Worker name and self-reference service binding must both stay `nelna-erp-support`.
+
+Use these commands:
+
+```bash
+npm run build
+npm run deploy
+```
+
+For Cloudflare Git builds, connect the project as a **Workers** deployment and set the build/deploy command to:
+
+```bash
+npm run deploy
+```
+
+Do not use a Cloudflare Pages build setting that runs only `npm run build` and points the output directory at `.next`. If a Pages project must remain connected temporarily, set it to use OpenNext output instead of `.next`:
+
+```text
+Build command: npm run build:cloudflare
+Output directory: .open-next/assets
+```
+
+The recommended production path is still Cloudflare Workers via `npm run deploy`, because the Worker bundle in `.open-next/worker.js` is required for the Next.js API routes.

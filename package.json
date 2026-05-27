@@ -12,7 +12,7 @@
     "build": "next build",
     "start": "next start",
     "build:cloudflare": "opennextjs-cloudflare build",
-    "deploy": "opennextjs-cloudflare build && cross-env CI=true wrangler deploy --config wrangler.jsonc --x-autoconfig=false",
+    "deploy": "opennextjs-cloudflare build && cross-env CI=true opennextjs-cloudflare deploy --config wrangler.jsonc --x-autoconfig=false",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
