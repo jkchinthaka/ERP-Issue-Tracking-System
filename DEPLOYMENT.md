@@ -78,6 +78,12 @@ npm run seed
 
 The seed command writes to Atlas through `MAIN_DATABASE_URL`.
 
+### Render Auth Troubleshooting
+
+`/api/auth/me` returns `401` until the browser has a valid `nelna_erp_session` cookie. This is expected before login.
+
+If `/api/auth/login` returns `500`, check the Render service environment first. The hosted app needs `MAIN_DATABASE_URL` and `JWT_SECRET`; `MONGODB_URI` or `DATABASE_URL` are accepted as legacy database variable names, but `MAIN_DATABASE_URL` is preferred. Also confirm MongoDB Atlas Network Access allows the Render outbound ranges below, then seed or create at least one active user in Atlas.
+
 ### Render Outbound IP Allowlist
 
 Render network requests from this service to public services can come from either of these shared outbound ranges:

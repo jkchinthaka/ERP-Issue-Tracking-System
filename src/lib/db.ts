@@ -20,7 +20,7 @@ export async function connectToDatabase() {
     return cached.conn;
   }
 
-  const databaseUrl = process.env.MAIN_DATABASE_URL ?? "";
+  const databaseUrl = process.env.MAIN_DATABASE_URL || process.env.MONGODB_URI || process.env.DATABASE_URL || "";
 
   if (!databaseUrl) {
     throw new Error("MAIN_DATABASE_URL is not configured. Add the MongoDB Atlas connection string before starting the app.");
@@ -30,6 +30,7 @@ export async function connectToDatabase() {
     cached.promise = mongoose.connect(databaseUrl, {
       dbName: "nelna",
       autoIndex: process.env.NODE_ENV !== "production",
+      serverSelectionTimeoutMS: 10000,
     });
   }
 
