@@ -76,6 +76,19 @@ Run the seed command once after environment variables and MongoDB are ready:
 npm run seed
 ```
 
+### Render Outbound IP Allowlist
+
+Render network requests from this service to public services can come from either of these shared outbound ranges:
+
+```text
+74.220.49.0/24
+74.220.57.0/24
+```
+
+Allowlist both ranges on any external service that restricts inbound connections from the deployed app. For MongoDB Atlas, open **Network Access**, choose **Add IP Address**, add each CIDR range above, and save. For a company-hosted MongoDB server, ask the network or firewall administrator to allow inbound MongoDB traffic from both ranges to the database host and port.
+
+These ranges are shared with other Render services in the same region. If the database or security policy requires a unique static outbound IP, configure a Render Dedicated IP and allowlist that dedicated address instead.
+
 ## Docker Deployment
 
 This repository includes a production `Dockerfile` using Next.js standalone output.
