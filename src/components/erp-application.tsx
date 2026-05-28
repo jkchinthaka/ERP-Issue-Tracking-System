@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import {
   AlertTriangle,
@@ -212,14 +212,31 @@ const emptyReference: ReferenceData = {
   },
 };
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  const contentType = response.headers.get("content-type") ?? "";
-  const payload = contentType.includes("application/json") ? await response.json() : null;
-  if (!response.ok) {
+  const method = init?.method?.toUpperCase() ?? "GET";
+  const attempts = method === "GET" ? 2 : 1;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const response = await fetch(path, init);
+    const contentType = response.headers.get("content-type") ?? "";
+    const payload = contentType.includes("application/json") ? await response.json() : null;
+    if (response.ok) {
+      return payload as T;
+    }
+
+    if ([502, 503, 504].includes(response.status) && attempt < attempts) {
+      await delay(750);
+      continue;
+    }
+
     throw new Error(payload?.message ?? "Something went wrong. Please try again.");
   }
-  return payload as T;
+
+  throw new Error("Something went wrong. Please try again.");
 }
 
 function getEntityId(value?: EntityRef | string) {
@@ -270,7 +287,7 @@ function Badge({ children, className }: { children: React.ReactNode; className?:
 
 function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-slate-950">{title}</h2>
         {action}
@@ -304,38 +321,60 @@ function StatCard({ label, value, icon: Icon, tone = "teal" }: { label: string; 
 }
 
 function ChartPanel({ title, data, type = "bar" }: { title: string; data?: Array<{ name: string; value: number }>; type?: "bar" | "pie" | "line" }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
   const chartData = data?.length ? data : [{ name: "No data", value: 0 }];
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateSize = () => {
+      const rect = container.getBoundingClientRect();
+      setChartSize({ width: Math.max(0, Math.floor(rect.width)), height: Math.max(0, Math.floor(rect.height)) });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  const chartIsReady = chartSize.width > 0 && chartSize.height > 0;
+
   return (
     <Panel title={title}>
-      <div className="h-72 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          {type === "pie" ? (
-            <PieChart>
-              <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={86} paddingAngle={3}>
-                {chartData.map((_, index) => (
-                  <Cell key={index} fill={chartColors[index % chartColors.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          ) : type === "line" ? (
-            <LineChart data={chartData} margin={{ top: 12, right: 16, left: -18, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="value" stroke="#0f766e" strokeWidth={3} dot={{ r: 4 }} />
-            </LineChart>
-          ) : (
-            <BarChart data={chartData} margin={{ top: 12, right: 16, left: -18, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-12} textAnchor="end" height={60} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="value" radius={[5, 5, 0, 0]} fill="#0f766e" />
-            </BarChart>
-          )}
-        </ResponsiveContainer>
+      <div ref={containerRef} className="h-72 min-w-0 w-full overflow-hidden">
+        {chartIsReady && (
+          <ResponsiveContainer width={chartSize.width} height={chartSize.height} minWidth={0}>
+            {type === "pie" ? (
+              <PieChart>
+                <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={86} paddingAngle={3}>
+                  {chartData.map((_, index) => (
+                    <Cell key={index} fill={chartColors[index % chartColors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            ) : type === "line" ? (
+              <LineChart data={chartData} margin={{ top: 12, right: 16, left: -18, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="value" stroke="#0f766e" strokeWidth={3} dot={{ r: 4 }} />
+              </LineChart>
+            ) : (
+              <BarChart data={chartData} margin={{ top: 12, right: 16, left: -18, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-12} textAnchor="end" height={60} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[5, 5, 0, 0]} fill="#0f766e" />
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        )}
       </div>
     </Panel>
   );
