@@ -246,6 +246,35 @@ Passwords come from `.env`, not source code.
 
 For a management walk-through, see [DEMO_GUIDE.md](DEMO_GUIDE.md).
 
+## QA Testing
+
+The complete QA package lives in [qa/](qa/). It includes the test strategy, manual test cases, security cases, UI/UX checks, role-permission matrix, API cases, smoke/regression/UAT checklists, bug report template, execution summary template, automation roadmap, Postman/Newman collection, and Playwright guide.
+
+Use these files before management demos and production releases:
+
+- [qa/SMOKE_TEST_CHECKLIST.md](qa/SMOKE_TEST_CHECKLIST.md) for fast deployment checks.
+- [qa/UAT_DEMO_CHECKLIST.md](qa/UAT_DEMO_CHECKLIST.md) for management demo readiness.
+- [qa/BUG_REPORT_TEMPLATE.md](qa/BUG_REPORT_TEMPLATE.md) to report defects consistently.
+- [qa/TEST_EXECUTION_SUMMARY.md](qa/TEST_EXECUTION_SUMMARY.md) to record sign-off evidence.
+
+Playwright E2E tests are stored under [tests/e2e/](tests/e2e/) with page objects under [tests/pages/](tests/pages/). The API collection is [qa/postman/collection.json](qa/postman/collection.json) with safe placeholders in [qa/postman/environment.example.json](qa/postman/environment.example.json).
+
+Common QA commands:
+
+```bash
+npm install
+npm init playwright@latest
+npm install -g newman
+npm run test:e2e
+npm run test:e2e:ui
+npm run test:e2e:headed
+npm run test:e2e:report
+npm run test:smoke
+npm run test:api
+```
+
+This repository already includes Playwright and Newman as development dependencies. Copy [.env.qa.example](.env.qa.example) to `.env.qa` and fill only test/demo credentials for full E2E execution. Do not commit `.env.qa` or real Postman environments.
+
 ## Permission Matrix
 
 | Capability | Super Admin | IT Support | Manager | Department Head | Staff | Vendor |

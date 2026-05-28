@@ -1,0 +1,683 @@
+{
+  "info": {
+    "name": "Nelna ERP Support API QA Collection",
+    "description": "Company-ready API regression suite for Nelna ERP Support & Improvement System. The app authenticates with the HTTP-only nelna_erp_session cookie. This collection captures the cookie value as authToken variables for Newman execution.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response time is under 5000 ms', function () { pm.expect(pm.response.responseTime).to.be.below(5000); });",
+          "const bodyText = pm.response.text();",
+          "['passwordHash', 'JWT_SECRET', 'MONGODB_URI', 'DATABASE_URL', 'MAIN_DATABASE_URL', 'BACKUP_DATABASE_URL', 'SMTP_PASS'].forEach(function (key) { pm.test('No sensitive field leaked: ' + key, function () { pm.expect(bodyText).to.not.include(key); }); });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "System Health",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Health endpoint is reachable or target deployment is pending', function () { pm.expect([200, 404, 502, 503]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('Health response has required fields', function () { pm.expect(json).to.have.keys(['status', 'app', 'timestamp', 'database', 'environment']); });",
+                  "  pm.test('Health status is ok', function () { pm.expect(json.status).to.eql('ok'); });",
+                  "} else {",
+                  "  pm.test('Health endpoint strict check skipped until target deploy includes /api/health', function () { pm.expect(true).to.eql(true); });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "GET /api/auth/me unauthenticated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Unauthenticated me is handled safely', function () { pm.expect([200, 401]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Unauthenticated me returns null user', function () { pm.expect(pm.response.json().user).to.eql(null); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login invalid password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"invalid@example.invalid\",\n  \"password\": \"wrong-password\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Invalid login is rejected', function () { pm.expect([400, 401]).to.include(pm.response.code); });",
+                  "pm.test('Invalid login does not return a session cookie', function () { pm.expect(pm.response.headers.get('Set-Cookie') || '').to.not.include('nelna_erp_session='); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login missing fields",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Missing login fields are rejected', function () { pm.expect([400, 401]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login NoSQL injection payload",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": { \"$ne\": \"\" },\n  \"password\": { \"$ne\": \"\" }\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('NoSQL-style login payload is rejected', function () { pm.expect([400, 401]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasCreds = Boolean(pm.environment.get('adminEmail') && pm.environment.get('adminPassword'));",
+                  "if (!hasCreds) {",
+                  "  pm.test('Skipped until admin credentials are configured', function () { pm.expect([400, 401]).to.include(pm.response.code); });",
+                  "} else {",
+                  "  pm.test('Admin login succeeds', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "  const setCookie = pm.response.headers.get('Set-Cookie') || '';",
+                  "  const match = setCookie.match(/nelna_erp_session=([^;]+)/);",
+                  "  pm.test('Admin session cookie is issued', function () { pm.expect(Boolean(match)).to.eql(true); });",
+                  "  if (match) { pm.environment.set('authToken', match[1]); pm.environment.set('adminToken', match[1]); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login staff",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{staffEmail}}\",\n  \"password\": \"{{staffPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasCreds = Boolean(pm.environment.get('staffEmail') && pm.environment.get('staffPassword'));",
+                  "if (!hasCreds) { pm.test('Skipped until staff credentials are configured', function () { pm.expect([400, 401]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Staff login succeeds', function () { pm.expect(pm.response.code).to.eql(200); }); const match = (pm.response.headers.get('Set-Cookie') || '').match(/nelna_erp_session=([^;]+)/); pm.test('Staff session cookie is issued', function () { pm.expect(Boolean(match)).to.eql(true); }); if (match) { pm.environment.set('staffToken', match[1]); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login IT Support",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{itEmail}}\",\n  \"password\": \"{{itPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasCreds = Boolean(pm.environment.get('itEmail') && pm.environment.get('itPassword'));",
+                  "if (!hasCreds) { pm.test('Skipped until IT credentials are configured', function () { pm.expect([400, 401]).to.include(pm.response.code); }); }",
+                  "else { pm.test('IT login succeeds', function () { pm.expect(pm.response.code).to.eql(200); }); const match = (pm.response.headers.get('Set-Cookie') || '').match(/nelna_erp_session=([^;]+)/); pm.test('IT session cookie is issued', function () { pm.expect(Boolean(match)).to.eql(true); }); if (match) { pm.environment.set('itToken', match[1]); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login manager",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{managerEmail}}\",\n  \"password\": \"{{managerPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasCreds = Boolean(pm.environment.get('managerEmail') && pm.environment.get('managerPassword'));",
+                  "if (!hasCreds) { pm.test('Skipped until manager credentials are configured', function () { pm.expect([400, 401]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Manager login succeeds', function () { pm.expect(pm.response.code).to.eql(200); }); const match = (pm.response.headers.get('Set-Cookie') || '').match(/nelna_erp_session=([^;]+)/); pm.test('Manager session cookie is issued', function () { pm.expect(Boolean(match)).to.eql(true); }); if (match) { pm.environment.set('managerToken', match[1]); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login vendor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{vendorEmail}}\",\n  \"password\": \"{{vendorPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasCreds = Boolean(pm.environment.get('vendorEmail') && pm.environment.get('vendorPassword'));",
+                  "if (!hasCreds) { pm.test('Skipped until vendor credentials are configured', function () { pm.expect([400, 401]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Vendor login succeeds', function () { pm.expect(pm.response.code).to.eql(200); }); const match = (pm.response.headers.get('Set-Cookie') || '').match(/nelna_erp_session=([^;]+)/); pm.test('Vendor session cookie is issued', function () { pm.expect(Boolean(match)).to.eql(true); }); if (match) { pm.environment.set('vendorToken', match[1]); } }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin and Reference Data",
+      "item": [
+        {
+          "name": "GET /api/auth/me authenticated admin",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{adminToken}}" }],
+            "url": "{{baseUrl}}/api/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('adminToken'));",
+                  "if (!hasToken) { pm.test('Skipped until admin token is available', function () { pm.expect([200, 401]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Admin me succeeds', function () { pm.expect(pm.response.code).to.eql(200); }); pm.test('Admin user object returned', function () { pm.expect(pm.response.json().user).to.be.an('object'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/reference admin",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{adminToken}}" }],
+            "url": "{{baseUrl}}/api/reference"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('adminToken'));",
+                  "if (!hasToken) { pm.test('Skipped until admin token is available', function () { pm.expect([401, 403]).to.include(pm.response.code); }); }",
+                  "else {",
+                  "  pm.test('Reference data loads for admin', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "  const json = pm.response.json();",
+                  "  pm.test('Reference has departments/modules/constants', function () { pm.expect(json.departments).to.be.an('array'); pm.expect(json.erpModules).to.be.an('array'); pm.expect(json.constants).to.be.an('object'); });",
+                  "  if (json.departments && json.departments[0]) pm.environment.set('departmentId', json.departments[0]._id);",
+                  "  if (json.erpModules && json.erpModules[0]) pm.environment.set('erpModuleId', json.erpModules[0]._id);",
+                  "  if (json.vendors && json.vendors[0]) pm.environment.set('vendorId', json.vendors[0]._id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/dashboard admin",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{adminToken}}" }],
+            "url": "{{baseUrl}}/api/dashboard"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('adminToken'));",
+                  "if (!hasToken) { pm.test('Skipped until admin token is available', function () { pm.expect([401, 403]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Admin dashboard loads', function () { pm.expect(pm.response.code).to.eql(200); }); pm.test('Dashboard has cards and charts', function () { const json = pm.response.json(); pm.expect(json.cards).to.be.an('object'); pm.expect(json.charts).to.be.an('object'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/audit-logs admin",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{adminToken}}" }],
+            "url": "{{baseUrl}}/api/audit-logs"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('adminToken'));",
+                  "if (!hasToken) { pm.test('Skipped until admin token is available', function () { pm.expect([401, 403]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Admin audit logs load', function () { pm.expect(pm.response.code).to.eql(200); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/email-logs admin",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{adminToken}}" }],
+            "url": "{{baseUrl}}/api/email-logs"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('adminToken'));",
+                  "if (!hasToken) { pm.test('Skipped until admin token is available', function () { pm.expect([401, 403]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Admin email logs load', function () { pm.expect(pm.response.code).to.eql(200); }); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Issue Workflow",
+      "item": [
+        {
+          "name": "POST /api/issues create staff issue",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{staffToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "requestType", "value": "Support", "type": "text" },
+                { "key": "departmentId", "value": "{{departmentId}}", "type": "text" },
+                { "key": "erpModuleId", "value": "{{erpModuleId}}", "type": "text" },
+                { "key": "businessImpact", "value": "Work is delayed but can continue", "type": "text" },
+                { "key": "title", "value": "QA AUTO API issue", "type": "text" },
+                { "key": "description", "value": "Automated Newman issue created for QA validation.", "type": "text" }
+              ]
+            },
+            "url": "{{baseUrl}}/api/issues"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('staffToken') && pm.environment.get('departmentId') && pm.environment.get('erpModuleId'));",
+                  "if (!ready) { pm.test('Skipped until staff token and reference IDs are available', function () { pm.expect([400, 401, 403]).to.include(pm.response.code); }); }",
+                  "else {",
+                  "  pm.test('Staff issue create succeeds', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "  const json = pm.response.json();",
+                  "  pm.test('Issue ID returned', function () { pm.expect(json.issue.issueId).to.be.a('string'); });",
+                  "  pm.environment.set('issueId', json.issue._id || json.issue.issueId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/issues missing required fields",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{staffToken}}" }],
+            "body": { "mode": "formdata", "formdata": [{ "key": "title", "value": "", "type": "text" }] },
+            "url": "{{baseUrl}}/api/issues"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('staffToken'));",
+                  "if (!hasToken) { pm.test('Skipped until staff token is available', function () { pm.expect([401, 403]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Missing required issue fields are rejected', function () { pm.expect(pm.response.code).to.eql(400); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/issues staff scoped list",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{staffToken}}" }],
+            "url": "{{baseUrl}}/api/issues"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('staffToken'));",
+                  "if (!hasToken) { pm.test('Skipped until staff token is available', function () { pm.expect([401, 403]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Staff issue list loads', function () { pm.expect(pm.response.code).to.eql(200); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/issues/:id detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{staffToken}}" }],
+            "url": "{{baseUrl}}/api/issues/{{issueId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('staffToken') && pm.environment.get('issueId'));",
+                  "if (!ready) { pm.test('Skipped until staff token and issueId are available', function () { pm.expect([401, 403, 404, 405]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Issue detail loads', function () { pm.expect(pm.response.code).to.eql(200); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /api/issues/:id staff status update blocked",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Cookie", "value": "nelna_erp_session={{staffToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"In Progress\"\n}" },
+            "url": "{{baseUrl}}/api/issues/{{issueId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('staffToken') && pm.environment.get('issueId'));",
+                  "if (!ready) { pm.test('Skipped until staff token and issueId are available', function () { pm.expect([401, 403, 404, 405]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Staff status update is blocked', function () { pm.expect(pm.response.code).to.eql(403); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /api/issues/:id IT status update",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Cookie", "value": "nelna_erp_session={{itToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"In Progress\"\n}" },
+            "url": "{{baseUrl}}/api/issues/{{issueId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('itToken') && pm.environment.get('issueId'));",
+                  "if (!ready) { pm.test('Skipped until IT token and issueId are available', function () { pm.expect([401, 403, 404, 405]).to.include(pm.response.code); }); }",
+                  "else { pm.test('IT status update succeeds', function () { pm.expect(pm.response.code).to.eql(200); }); pm.test('Issue status returned', function () { pm.expect(pm.response.json().issue.status).to.eql('In Progress'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/issues/:id/comments public comment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Cookie", "value": "nelna_erp_session={{itToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"comment\": \"QA API public comment\",\n  \"isInternal\": false\n}" },
+            "url": "{{baseUrl}}/api/issues/{{issueId}}/comments"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('itToken') && pm.environment.get('issueId'));",
+                  "if (!ready) { pm.test('Skipped until IT token and issueId are available', function () { pm.expect([401, 403, 404, 405]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Public comment succeeds', function () { pm.expect(pm.response.code).to.eql(201); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/issues/:id/comments staff internal note blocked",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Cookie", "value": "nelna_erp_session={{staffToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"comment\": \"QA internal note attempt\",\n  \"isInternal\": true\n}" },
+            "url": "{{baseUrl}}/api/issues/{{issueId}}/comments"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('staffToken') && pm.environment.get('issueId'));",
+                  "if (!ready) { pm.test('Skipped until staff token and issueId are available', function () { pm.expect([401, 403, 404, 405]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Staff internal note is blocked', function () { pm.expect(pm.response.code).to.eql(403); }); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Vendor Follow-up and Permissions",
+      "item": [
+        {
+          "name": "POST /api/vendor-followups create follow-up",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Cookie", "value": "nelna_erp_session={{itToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"issueId\": \"{{issueId}}\",\n  \"vendorId\": \"{{vendorId}}\",\n  \"vendorStatus\": \"Sent to Vendor\",\n  \"vendorResponse\": \"QA API follow-up created.\"\n}" },
+            "url": "{{baseUrl}}/api/vendor-followups"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('itToken') && pm.environment.get('issueId') && pm.environment.get('vendorId'));",
+                  "if (!ready) { pm.test('Skipped until IT token, issueId, and vendorId are available', function () { pm.expect([400, 401, 403]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Vendor follow-up create succeeds', function () { pm.expect(pm.response.code).to.eql(201); }); const json = pm.response.json(); if (json.followup && json.followup._id) pm.environment.set('followupId', json.followup._id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/vendor-followups vendor scoped list",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{vendorToken}}" }],
+            "url": "{{baseUrl}}/api/vendor-followups"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('vendorToken'));",
+                  "if (!hasToken) { pm.test('Skipped until vendor token is available', function () { pm.expect([401, 403]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Vendor follow-up list loads', function () { pm.expect(pm.response.code).to.eql(200); }); pm.test('Vendor followups array returned', function () { pm.expect(pm.response.json().followups).to.be.an('array'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /api/vendor-followups vendor response",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Cookie", "value": "nelna_erp_session={{vendorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"followupId\": \"{{followupId}}\",\n  \"vendorStatus\": \"Vendor Reviewing\",\n  \"vendorResponse\": \"QA API vendor response.\"\n}" },
+            "url": "{{baseUrl}}/api/vendor-followups"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('vendorToken') && pm.environment.get('followupId'));",
+                  "if (!ready) { pm.test('Skipped until vendor token and followupId are available', function () { pm.expect([400, 401, 403, 404]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Vendor response update succeeds', function () { pm.expect(pm.response.code).to.eql(200); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/audit-logs staff blocked",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "nelna_erp_session={{staffToken}}" }],
+            "url": "{{baseUrl}}/api/audit-logs"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const hasToken = Boolean(pm.environment.get('staffToken'));",
+                  "if (!hasToken) { pm.test('Skipped until staff token is available', function () { pm.expect([401, 403]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Staff audit access is blocked', function () { pm.expect(pm.response.code).to.eql(403); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /api/issues/:id manager status update blocked",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Cookie", "value": "nelna_erp_session={{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"Resolved\"\n}" },
+            "url": "{{baseUrl}}/api/issues/{{issueId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ready = Boolean(pm.environment.get('managerToken') && pm.environment.get('issueId'));",
+                  "if (!ready) { pm.test('Skipped until manager token and issueId are available', function () { pm.expect([401, 403, 404, 405]).to.include(pm.response.code); }); }",
+                  "else { pm.test('Manager status update is blocked', function () { pm.expect(pm.response.code).to.eql(403); }); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

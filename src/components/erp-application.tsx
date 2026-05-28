@@ -328,7 +328,7 @@ function Panel({ title, action, children }: { title: string; action?: React.Reac
   );
 }
 
-function StatCard({ label, value, icon: Icon, tone = "teal" }: { label: string; value: React.ReactNode; icon: React.ElementType; tone?: "teal" | "blue" | "amber" | "red" | "slate" }) {
+function StatCard({ label, value, icon: Icon, tone = "teal", testId }: { label: string; value: React.ReactNode; icon: React.ElementType; tone?: "teal" | "blue" | "amber" | "red" | "slate"; testId?: string }) {
   const tones = {
     teal: "bg-teal-50 text-teal-700 ring-teal-100",
     blue: "bg-blue-50 text-blue-700 ring-blue-100",
@@ -338,7 +338,7 @@ function StatCard({ label, value, icon: Icon, tone = "teal" }: { label: string; 
   };
   const longValue = typeof value === "string" && value.length > 12;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div data-testid={testId} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-slate-500">{label}</p>
@@ -650,7 +650,7 @@ export default function ERPApplication() {
               <button onClick={() => loadWorkspace(user)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 <RefreshCw className="h-4 w-4" /> Refresh
               </button>
-              <button onClick={logout} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+              <button data-testid="logout-button" onClick={logout} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
                 <LogOut className="h-4 w-4" /> Logout
               </button>
             </div>
@@ -758,10 +758,10 @@ function LoginScreen({ onLogin }: { onLogin: (user: UserSession) => Promise<void
           <p className="mt-1 text-sm text-slate-500">Use a seeded test user after running `npm run seed`.</p>
           {error && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
           <label className="mt-5 block text-sm font-semibold text-slate-700">Email</label>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" />
+          <input data-testid="login-email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" />
           <label className="mt-4 block text-sm font-semibold text-slate-700">Password</label>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" />
-          <button disabled={busy} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60">
+          <input data-testid="login-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" />
+          <button data-testid="login-submit" disabled={busy} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60">
             <ShieldCheck className="h-4 w-4" /> {busy ? "Signing in..." : "Sign in"}
           </button>
           {showDemoCredentials && (
@@ -802,7 +802,7 @@ function DashboardView({ user, dashboard, isLoading, error, setView }: { user: U
           <p className="mt-1 text-sm text-slate-500">Track impact, ownership, vendor pending work, SLA risk, repeated issues, and improvement actions in one place.</p>
         </div>
         {user.permissions.includes("create_issue") && (
-          <button onClick={() => setView("new")} className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800">
+          <button data-testid="report-issue-button" onClick={() => setView("new")} className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800">
             <Plus className="h-4 w-4" /> Report ERP Issue
           </button>
         )}
@@ -816,10 +816,10 @@ function DashboardView({ user, dashboard, isLoading, error, setView }: { user: U
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {isLoading ? Array.from({ length: 8 }, (_, index) => <StatCardSkeleton key={index} />) : (
           <>
-            <StatCard label="Total Issues This Month" value={cards.totalThisMonth ?? 0} icon={ClipboardList} tone="teal" />
+            <StatCard testId="dashboard-card-total-issues" label="Total Issues This Month" value={cards.totalThisMonth ?? 0} icon={ClipboardList} tone="teal" />
             <StatCard label="Open Issues" value={cards.openIssues ?? 0} icon={Clock} tone="blue" />
             <StatCard label="Critical Issues" value={cards.criticalIssues ?? 0} icon={AlertTriangle} tone="red" />
-            <StatCard label="Pending Vendor" value={cards.pendingVendor ?? 0} icon={Truck} tone="amber" />
+            <StatCard testId="dashboard-card-pending-vendor" label="Pending Vendor" value={cards.pendingVendor ?? 0} icon={Truck} tone="amber" />
             <StatCard label="SLA Breached" value={cards.slaBreached ?? 0} icon={AlertTriangle} tone="red" />
             <StatCard label="Average Resolution Time" value={minutesLabel(cards.averageResolutionMinutes)} icon={CheckCircle2} tone="teal" />
             <StatCard label="Top Affected Department" value={cards.topAffectedDepartment ?? "No issues"} icon={Building2} tone="slate" />
@@ -878,11 +878,11 @@ function IssueForm({ reference, onCreated, onError }: { reference: ReferenceData
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       {success && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+        <div data-testid="issue-success-message" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
             <div>
               <p className="text-sm font-semibold">Issue submitted</p>
-              <p className="mt-1 text-lg font-semibold">{success.issueId}</p>
+              <p data-testid="issue-id" className="mt-1 text-lg font-semibold">{success.issueId}</p>
               <p className="text-sm">{success.message}</p>
             </div>
             <button onClick={() => navigator.clipboard?.writeText(success.issueId)} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">
@@ -893,13 +893,13 @@ function IssueForm({ reference, onCreated, onError }: { reference: ReferenceData
       )}
       <Panel title="Report ERP Issue">
         <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-          <Select label="Request Type" value={form.requestType} required options={reference.constants.requestTypes} onChange={(value) => setForm({ ...form, requestType: value })} />
-          <Select label="Department" value={form.departmentId} required options={reference.departments.map((department) => ({ value: department._id, label: department.name ?? "Department" }))} onChange={(value) => setForm({ ...form, departmentId: value })} />
-          <Select label="ERP Module" value={form.erpModuleId} required options={reference.erpModules.map((module) => ({ value: module._id, label: module.moduleName ?? "ERP Module" }))} onChange={(value) => setForm({ ...form, erpModuleId: value })} />
-          <Select label="How much is this affecting your work?" value={form.businessImpact} required options={reference.constants.businessImpactOptions} onChange={(value) => setForm({ ...form, businessImpact: value })} helper={`Priority suggestion: ${impactPriority}`} />
-          <TextInput label="Issue Title" value={form.title} required placeholder="Example: GRN cannot be saved" onChange={(value) => setForm({ ...form, title: value })} />
+          <Select testId="issue-request-type-select" label="Request Type" value={form.requestType} required options={reference.constants.requestTypes} onChange={(value) => setForm({ ...form, requestType: value })} />
+          <Select testId="issue-department-select" label="Department" value={form.departmentId} required options={reference.departments.map((department) => ({ value: department._id, label: department.name ?? "Department" }))} onChange={(value) => setForm({ ...form, departmentId: value })} />
+          <Select testId="issue-module-select" label="ERP Module" value={form.erpModuleId} required options={reference.erpModules.map((module) => ({ value: module._id, label: module.moduleName ?? "ERP Module" }))} onChange={(value) => setForm({ ...form, erpModuleId: value })} />
+          <Select testId="issue-impact-select" label="How much is this affecting your work?" value={form.businessImpact} required options={reference.constants.businessImpactOptions} onChange={(value) => setForm({ ...form, businessImpact: value })} helper={`Priority suggestion: ${impactPriority}`} />
+          <TextInput testId="issue-title-input" label="Issue Title" value={form.title} required placeholder="Example: GRN cannot be saved" onChange={(value) => setForm({ ...form, title: value })} />
           <div className="md:col-span-2">
-            <TextArea label="Short Description" value={form.description} required placeholder="Please briefly explain what happened. Example: When I try to save the GRN, an error message appears." onChange={(value) => setForm({ ...form, description: value })} />
+            <TextArea testId="issue-description-input" label="Short Description" value={form.description} required placeholder="Please briefly explain what happened. Example: When I try to save the GRN, an error message appears." onChange={(value) => setForm({ ...form, description: value })} />
           </div>
           {suggestions.length > 0 && (
             <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -933,7 +933,7 @@ function IssueForm({ reference, onCreated, onError }: { reference: ReferenceData
             </>
           )}
           <div className="md:col-span-2 flex justify-end">
-            <button disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60">
+            <button data-testid="issue-submit-button" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60">
               <Send className="h-4 w-4" /> {busy ? "Submitting..." : "Submit Issue"}
             </button>
           </div>
@@ -1406,10 +1406,10 @@ function IssueDetailModal({ detail, issue, reference, user, onClose, onChanged, 
   );
 }
 
-function Select({ label, value, options, onChange, required, helper, compact }: { label: string; value: string; options: Array<string | { value: string; label: string }>; onChange: (value: string) => void; required?: boolean; helper?: string; compact?: boolean }) {
+function Select({ label, value, options, onChange, required, helper, compact, testId }: { label: string; value: string; options: Array<string | { value: string; label: string }>; onChange: (value: string) => void; required?: boolean; helper?: string; compact?: boolean; testId?: string }) {
   return (
     <label className={clsx("block text-sm font-semibold text-slate-700", compact && "text-xs")}>{label}
-      <select required={required} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100">
+      <select data-testid={testId} required={required} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100">
         <option value="">All / Select</option>
         {options.map((option) => typeof option === "string" ? <option key={option} value={option}>{option}</option> : <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
@@ -1418,12 +1418,12 @@ function Select({ label, value, options, onChange, required, helper, compact }: 
   );
 }
 
-function TextInput({ label, value, onChange, required, placeholder, type = "text" }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; placeholder?: string; type?: string }) {
-  return <label className="block text-sm font-semibold text-slate-700">{label}<input type={type} required={required} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>;
+function TextInput({ label, value, onChange, required, placeholder, type = "text", testId }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; placeholder?: string; type?: string; testId?: string }) {
+  return <label className="block text-sm font-semibold text-slate-700">{label}<input data-testid={testId} type={type} required={required} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>;
 }
 
-function TextArea({ label, value, onChange, required, placeholder }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; placeholder?: string }) {
-  return <label className="block text-sm font-semibold text-slate-700">{label}<textarea required={required} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>;
+function TextArea({ label, value, onChange, required, placeholder, testId }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; placeholder?: string; testId?: string }) {
+  return <label className="block text-sm font-semibold text-slate-700">{label}<textarea data-testid={testId} required={required} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>;
 }
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {

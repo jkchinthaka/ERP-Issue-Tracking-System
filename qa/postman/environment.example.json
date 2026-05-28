@@ -1,0 +1,30 @@
+{
+  "id": "7f72d401-4540-47a6-bf09-0d7f6acfb981",
+  "name": "Nelna ERP QA Environment Example",
+  "values": [
+    { "key": "baseUrl", "value": "https://erp-issue-tracking-system.onrender.com", "type": "default", "enabled": true },
+    { "key": "authToken", "value": "", "type": "secret", "enabled": true },
+    { "key": "adminToken", "value": "", "type": "secret", "enabled": true },
+    { "key": "itToken", "value": "", "type": "secret", "enabled": true },
+    { "key": "staffToken", "value": "", "type": "secret", "enabled": true },
+    { "key": "managerToken", "value": "", "type": "secret", "enabled": true },
+    { "key": "vendorToken", "value": "", "type": "secret", "enabled": true },
+    { "key": "adminEmail", "value": "", "type": "default", "enabled": true },
+    { "key": "adminPassword", "value": "", "type": "secret", "enabled": true },
+    { "key": "itEmail", "value": "", "type": "default", "enabled": true },
+    { "key": "itPassword", "value": "", "type": "secret", "enabled": true },
+    { "key": "managerEmail", "value": "", "type": "default", "enabled": true },
+    { "key": "managerPassword", "value": "", "type": "secret", "enabled": true },
+    { "key": "staffEmail", "value": "", "type": "default", "enabled": true },
+    { "key": "staffPassword", "value": "", "type": "secret", "enabled": true },
+    { "key": "vendorEmail", "value": "", "type": "default", "enabled": true },
+    { "key": "vendorPassword", "value": "", "type": "secret", "enabled": true },
+    { "key": "departmentId", "value": "", "type": "default", "enabled": true },
+    { "key": "erpModuleId", "value": "", "type": "default", "enabled": true },
+    { "key": "vendorId", "value": "", "type": "default", "enabled": true },
+    { "key": "issueId", "value": "", "type": "default", "enabled": true },
+    { "key": "followupId", "value": "", "type": "default", "enabled": true }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_using": "Postman/QA Package"
+}
