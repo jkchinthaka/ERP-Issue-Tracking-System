@@ -5,11 +5,26 @@ import { connectToDatabase } from "@/lib/db";
 import { ImprovementAction } from "@/lib/models";
 import { hasPermission } from "@/lib/permissions";
 import { generateActionId } from "@/lib/issue-id";
-import { isObjectId, sanitizeText, serialize } from "@/lib/utils";
+import { serialize } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { optionalDateField, optionalObjectIdField, optionalText, requiredText, validateInput, z } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const improvementActionSchema = z.object({
+  sourceIssueId: optionalObjectIdField("Source issue"),
+  title: requiredText("Improvement title", 180),
+  description: optionalText(3000),
+  ownerId: optionalObjectIdField("Owner"),
+  departmentId: optionalObjectIdField("Department"),
+  dueDate: optionalDateField("Due date"),
+  status: optionalText(80),
+  priority: optionalText(80),
+  expectedBenefit: optionalText(2000),
+  actualResult: optionalText(2000),
+  managementRemark: optionalText(2000),
+});
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,22 +40,22 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
-    if (!hasPermission(user, "update_status") && !hasPermission(user, "view_management_dashboard")) throw new ApiError("You do not have permission to access this page.", 403);
+    if (!hasPermission(user, "update_status") && !hasPermission(user, "manage_settings")) throw new ApiError("You do not have permission to access this page.", 403);
     await connectToDatabase();
-    const body = await request.json();
+    const body = validateInput(improvementActionSchema, await request.json());
     const saved = await ImprovementAction.create({
       actionId: await generateActionId(),
-      sourceIssueId: isObjectId(String(body.sourceIssueId)) ? body.sourceIssueId : undefined,
-      title: sanitizeText(body.title, 180),
-      description: sanitizeText(body.description, 3000),
-      ownerId: isObjectId(String(body.ownerId)) ? body.ownerId : undefined,
-      departmentId: isObjectId(String(body.departmentId)) ? body.departmentId : undefined,
-      dueDate: body.dueDate ? new Date(String(body.dueDate)) : undefined,
-      status: sanitizeText(body.status, 80) || "Proposed",
-      priority: sanitizeText(body.priority, 80) || "Medium",
-      expectedBenefit: sanitizeText(body.expectedBenefit, 2000),
-      actualResult: sanitizeText(body.actualResult, 2000),
-      managementRemark: sanitizeText(body.managementRemark, 2000),
+      sourceIssueId: body.sourceIssueId,
+      title: body.title,
+      description: body.description ?? "",
+      ownerId: body.ownerId,
+      departmentId: body.departmentId,
+      dueDate: body.dueDate,
+      status: body.status || "Proposed",
+      priority: body.priority || "Medium",
+      expectedBenefit: body.expectedBenefit ?? "",
+      actualResult: body.actualResult ?? "",
+      managementRemark: body.managementRemark ?? "",
     });
     await createAuditLog({ entityType: "ImprovementAction", entityId: String(saved._id), action: "Improvement action created", performedBy: user.id, request, newValue: saved });
     return ok({ action: serialize(saved) }, { status: 201 });

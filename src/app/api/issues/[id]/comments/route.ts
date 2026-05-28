@@ -5,11 +5,18 @@ import { connectToDatabase } from "@/lib/db";
 import { IssueComment } from "@/lib/models";
 import { canAccessIssue, hasPermission } from "@/lib/permissions";
 import { findIssueByIdentity } from "@/lib/queries";
-import { sanitizeText, serialize, toId } from "@/lib/utils";
+import { serialize, toId } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { optionalBooleanField, optionalText, requiredText, validateInput, z } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const commentSchema = z.object({
+  comment: requiredText("Comment", 3000),
+  isInternal: optionalBooleanField(),
+  commentType: optionalText(80),
+});
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,11 +28,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       throw new ApiError("You do not have permission to access this page.", 403);
     }
 
-    const body = await request.json();
-    const comment = sanitizeText(body.comment, 3000);
+    const body = validateInput(commentSchema, await request.json());
+    const comment = body.comment;
     const isInternal = body.isInternal === true;
     const isVendor = body.commentType === "Vendor";
-    if (!comment) throw new ApiError("Please enter a comment.", 400);
     if (isInternal && !hasPermission(user, "add_internal_note")) throw new ApiError("You do not have permission to access this page.", 403);
     if (isVendor && !hasPermission(user, "add_vendor_note")) throw new ApiError("You do not have permission to access this page.", 403);
 

@@ -7,16 +7,19 @@ import {
   BarChart3,
   BookOpen,
   Building2,
+  ChevronDown,
   CheckCircle2,
   ClipboardList,
   Clock,
   Copy,
+  Database,
   FileDown,
   FileText,
   Gauge,
   LayoutDashboard,
   LogOut,
   MessageSquare,
+  MailCheck,
   Plus,
   RefreshCw,
   Search,
@@ -216,24 +219,52 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+function apiErrorMessage(status: number, payload: Record<string, unknown> | null) {
+  if (status === 401) return "Session expired. Please login again.";
+  if ([502, 503, 504].includes(status)) return "Backend unavailable. Please wait a moment and retry.";
+  if (status >= 500) return "Database/API error. Please refresh the page or contact IT.";
+  return typeof payload?.message === "string" ? payload.message : "Something went wrong. Please try again.";
+}
+
+function friendlyErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Network error. Please check your connection and try again.";
+}
+
+async function api<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
   const method = init?.method?.toUpperCase() ?? "GET";
   const attempts = method === "GET" ? 2 : 1;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const response = await fetch(path, init);
-    const contentType = response.headers.get("content-type") ?? "";
-    const payload = contentType.includes("application/json") ? await response.json() : null;
-    if (response.ok) {
-      return payload as T;
-    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
-    if ([502, 503, 504].includes(response.status) && attempt < attempts) {
-      await delay(750);
-      continue;
-    }
+    try {
+      const response = await fetch(path, { ...init, signal: init?.signal ?? controller.signal });
+      const contentType = response.headers.get("content-type") ?? "";
+      const payload = contentType.includes("application/json") ? await response.json() as Record<string, unknown> : null;
+      if (response.ok) {
+        return payload as T;
+      }
 
-    throw new Error(payload?.message ?? "Something went wrong. Please try again.");
+      if ([502, 503, 504].includes(response.status) && attempt < attempts) {
+        await delay(750);
+        continue;
+      }
+
+      throw new Error(apiErrorMessage(response.status, payload));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error("Backend unavailable. Please wait a moment and retry.");
+      }
+
+      if (error instanceof TypeError) {
+        throw new Error("Network error. Please check your connection and try again.");
+      }
+
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   throw new Error("Something went wrong. Please try again.");
@@ -305,12 +336,13 @@ function StatCard({ label, value, icon: Icon, tone = "teal" }: { label: string; 
     red: "bg-red-50 text-red-700 ring-red-100",
     slate: "bg-slate-100 text-slate-700 ring-slate-200",
   };
+  const longValue = typeof value === "string" && value.length > 12;
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
+          <p className={clsx("mt-2 wrap-break-word font-semibold text-slate-950", longValue ? "text-base leading-snug" : "text-2xl")}>{value}</p>
         </div>
         <span className={clsx("rounded-lg p-2 ring-1", tones[tone])}>
           <Icon className="h-5 w-5" />
@@ -320,10 +352,29 @@ function StatCard({ label, value, icon: Icon, tone = "teal" }: { label: string; 
   );
 }
 
+function StatCardSkeleton() {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="h-4 w-32 rounded bg-slate-200" />
+      <div className="mt-4 h-8 w-20 rounded bg-slate-200" />
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon = Database, title, message }: { icon?: React.ElementType; title: string; message: string }) {
+  return (
+    <div className="flex min-h-44 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 text-center">
+      <Icon className="h-6 w-6 text-slate-400" />
+      <p className="mt-3 text-sm font-semibold text-slate-700">{title}</p>
+      <p className="mt-1 max-w-sm text-xs text-slate-500">{message}</p>
+    </div>
+  );
+}
+
 function ChartPanel({ title, data, type = "bar" }: { title: string; data?: Array<{ name: string; value: number }>; type?: "bar" | "pie" | "line" }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
-  const chartData = data?.length ? data : [{ name: "No data", value: 0 }];
+  const chartData = data?.filter((item) => Number(item.value) > 0) ?? [];
 
   useEffect(() => {
     const container = containerRef.current;
@@ -344,9 +395,13 @@ function ChartPanel({ title, data, type = "bar" }: { title: string; data?: Array
 
   return (
     <Panel title={title}>
-      <div ref={containerRef} className="h-72 min-w-0 w-full overflow-hidden">
-        {chartIsReady && (
-          <ResponsiveContainer width={chartSize.width} height={chartSize.height} minWidth={0}>
+      {!chartData.length ? (
+        <EmptyState title="No chart data yet" message="New issue activity will appear here after users submit and update ERP support records." />
+      ) : null}
+      {chartData.length > 0 && (
+        <div ref={containerRef} className="h-72 min-w-0 w-full overflow-hidden">
+          {chartIsReady && (
+            <ResponsiveContainer width={chartSize.width} height={chartSize.height} minWidth={0}>
             {type === "pie" ? (
               <PieChart>
                 <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={86} paddingAngle={3}>
@@ -373,10 +428,56 @@ function ChartPanel({ title, data, type = "bar" }: { title: string; data?: Array
                 <Bar dataKey="value" radius={[5, 5, 0, 0]} fill="#0f766e" />
               </BarChart>
             )}
-          </ResponsiveContainer>
-        )}
-      </div>
+            </ResponsiveContainer>
+          )}
+        </div>
+      )}
     </Panel>
+  );
+}
+
+function LoadingScreen({ timedOut, onRetry }: { timedOut: boolean; onRetry: () => void }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-900">
+      <section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100">
+          <Gauge className="h-7 w-7" />
+        </div>
+        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-teal-700">Nelna ERP Support</p>
+        <h1 className="mt-1 text-xl font-semibold text-slate-950">Loading support workspace</h1>
+        <div className="mx-auto mt-5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full w-1/2 animate-pulse rounded-full bg-teal-600" />
+        </div>
+        {timedOut ? (
+          <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-semibold">Unable to load the ERP support workspace. Please refresh the page or contact IT.</p>
+            <button onClick={onRetry} className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-800">
+              <RefreshCw className="h-4 w-4" /> Retry
+            </button>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-slate-500">Checking session and backend availability...</p>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function LoadFailureScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-900">
+      <section className="w-full max-w-md rounded-lg border border-red-200 bg-white p-6 text-center shadow-sm">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-red-50 text-red-700 ring-1 ring-red-100">
+          <AlertTriangle className="h-7 w-7" />
+        </div>
+        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-red-700">Workspace unavailable</p>
+        <h1 className="mt-1 text-xl font-semibold text-slate-950">Unable to load the ERP support workspace</h1>
+        <p className="mt-3 text-sm text-slate-600">{message}</p>
+        <button onClick={onRetry} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800">
+          <RefreshCw className="h-4 w-4" /> Retry
+        </button>
+      </section>
+    </main>
   );
 }
 
@@ -391,6 +492,11 @@ export default function ERPApplication() {
   const [emailLogs, setEmailLogs] = useState<Array<Record<string, unknown>>>([]);
   const [view, setView] = useState("dashboard");
   const [loading, setLoading] = useState(true);
+  const [bootTimedOut, setBootTimedOut] = useState(false);
+  const [bootError, setBootError] = useState("");
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
@@ -401,44 +507,73 @@ export default function ERPApplication() {
   async function loadWorkspace(activeUser = user) {
     if (!activeUser) return;
     setError("");
-    const [referenceData, issueData, dashboardData, followupData, actionData] = await Promise.all([
-      api<ReferenceData>("/api/reference"),
-      api<{ issues: Issue[] }>("/api/issues"),
-      api<{ dashboard: DashboardData }>("/api/dashboard"),
-      api<{ followups: VendorFollowup[] }>("/api/vendor-followups"),
-      api<{ actions: ImprovementAction[] }>("/api/improvement-actions"),
-    ]);
-    setReference(referenceData);
-    setIssues(issueData.issues);
-    setDashboard(dashboardData.dashboard);
-    setFollowups(followupData.followups);
-    setActions(actionData.actions);
-    if (activeUser.permissions.includes("view_audit_log")) {
-      const [auditData, emailData] = await Promise.all([
-        api<{ logs: Array<Record<string, unknown>> }>("/api/audit-logs"),
-        api<{ logs: Array<Record<string, unknown>> }>("/api/email-logs"),
+    setWorkspaceLoading(true);
+    setDashboardLoading(true);
+    setDashboardError("");
+
+    try {
+      const [referenceData, issueData, followupData, actionData] = await Promise.all([
+        api<ReferenceData>("/api/reference"),
+        api<{ issues: Issue[] }>("/api/issues"),
+        api<{ followups: VendorFollowup[] }>("/api/vendor-followups"),
+        api<{ actions: ImprovementAction[] }>("/api/improvement-actions"),
       ]);
-      setAuditLogs(auditData.logs);
-      setEmailLogs(emailData.logs);
+      setReference(referenceData);
+      setIssues(issueData.issues);
+      setFollowups(followupData.followups);
+      setActions(actionData.actions);
+
+      try {
+        const dashboardData = await api<{ dashboard: DashboardData }>("/api/dashboard");
+        setDashboard(dashboardData.dashboard);
+      } catch (err) {
+        setDashboard(null);
+        setDashboardError(friendlyErrorMessage(err));
+      } finally {
+        setDashboardLoading(false);
+      }
+
+      if (activeUser.permissions.includes("view_audit_log")) {
+        const [auditData, emailData] = await Promise.all([
+          api<{ logs: Array<Record<string, unknown>> }>("/api/audit-logs"),
+          api<{ logs: Array<Record<string, unknown>> }>("/api/email-logs"),
+        ]);
+        setAuditLogs(auditData.logs);
+        setEmailLogs(emailData.logs);
+      }
+    } catch (err) {
+      setError(friendlyErrorMessage(err));
+    } finally {
+      setDashboardLoading(false);
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function boot() {
+    setLoading(true);
+    setBootError("");
+    setBootTimedOut(false);
+    const timeout = window.setTimeout(() => setBootTimedOut(true), 10000);
+
+    try {
+      const session = await api<{ user: UserSession | null }>("/api/auth/me", undefined, 10000);
+      if (session.user) {
+        setUser(session.user);
+        await loadWorkspace(session.user);
+      } else {
+        setUser(null);
+      }
+    } catch (err) {
+      setUser(null);
+      setBootError("Unable to load the ERP support workspace. Please refresh the page or contact IT.");
+      setError(friendlyErrorMessage(err));
+    } finally {
+      window.clearTimeout(timeout);
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    async function boot() {
-      try {
-        const session = await api<{ user: UserSession | null }>("/api/auth/me");
-        if (session.user) {
-          setUser(session.user);
-          await loadWorkspace(session.user);
-        } else {
-          setUser(null);
-        }
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    }
     void boot();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -457,7 +592,11 @@ export default function ERPApplication() {
   }
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-700">Loading Nelna ERP support workspace...</div>;
+    return <LoadingScreen timedOut={bootTimedOut} onRetry={() => void boot()} />;
+  }
+
+  if (bootError) {
+    return <LoadFailureScreen message={bootError} onRetry={() => void boot()} />;
   }
 
   if (!user) {
@@ -529,7 +668,8 @@ export default function ERPApplication() {
           {notice && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">{notice}</div>}
           {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>}
 
-          {view === "dashboard" && <DashboardView user={user} dashboard={dashboard} setView={setView} />}
+          {workspaceLoading && <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">Refreshing workspace data...</div>}
+          {view === "dashboard" && <DashboardView user={user} dashboard={dashboard} isLoading={dashboardLoading} error={dashboardError} setView={setView} />}
           {view === "new" && <IssueForm reference={reference} onCreated={async (message) => { setNotice(message); await loadWorkspace(user); setView("issues"); }} onError={setError} />}
           {view === "issues" && <IssuesView issues={issues} reference={reference} user={user} onOpen={openIssue} />}
           {view === "vendor" && <VendorView followups={followups} user={user} reference={reference} onUpdated={() => loadWorkspace(user)} onError={setError} />}
@@ -567,8 +707,17 @@ export default function ERPApplication() {
 function LoginScreen({ onLogin }: { onLogin: (user: UserSession) => Promise<void> }) {
   const [email, setEmail] = useState("admin@nelna.local");
   const [password, setPassword] = useState("");
+  const [showDemoDetails, setShowDemoDetails] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const showDemoCredentials = process.env.NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS === "true";
+  const demoUsers = [
+    { role: "Admin", email: "admin@nelna.local", password: "Use the password configured in environment variables." },
+    { role: "IT Support", email: "pathum@nelna.local", password: "Use the password configured in environment variables." },
+    { role: "Manager", email: "manager@nelna.local", password: "Use the password configured in environment variables." },
+    { role: "Department Staff", email: "stores.staff@nelna.local", password: "Use the password configured in environment variables." },
+    { role: "Vendor", email: "bileeta.support@bileeta.local", password: "Use the password configured in environment variables." },
+  ];
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -615,13 +764,35 @@ function LoginScreen({ onLogin }: { onLogin: (user: UserSession) => Promise<void
           <button disabled={busy} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60">
             <ShieldCheck className="h-4 w-4" /> {busy ? "Signing in..." : "Sign in"}
           </button>
+          {showDemoCredentials && (
+            <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50">
+              <button type="button" onClick={() => setShowDemoDetails(!showDemoDetails)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-semibold text-slate-800">
+                <span>Demo Login Details</span>
+                <ChevronDown className={clsx("h-4 w-4 transition", showDemoDetails && "rotate-180")} />
+              </button>
+              {showDemoDetails && (
+                <div className="border-t border-slate-200 px-3 py-3">
+                  <div className="space-y-2">
+                    {demoUsers.map((demoUser) => (
+                      <button key={demoUser.role} type="button" onClick={() => setEmail(demoUser.email)} className="w-full rounded-lg bg-white p-3 text-left text-sm ring-1 ring-slate-200 hover:bg-teal-50 hover:ring-teal-200">
+                        <span className="block font-semibold text-slate-950">{demoUser.role}</span>
+                        <span className="block text-slate-600">{demoUser.email}</span>
+                        <span className="mt-1 block text-xs text-slate-500">{demoUser.password}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs font-medium text-amber-700">For production use, demo credentials should be disabled.</p>
+                </div>
+              )}
+            </div>
+          )}
         </form>
       </div>
     </main>
   );
 }
 
-function DashboardView({ user, dashboard, setView }: { user: UserSession; dashboard: DashboardData | null; setView: (view: string) => void }) {
+function DashboardView({ user, dashboard, isLoading, error, setView }: { user: UserSession; dashboard: DashboardData | null; isLoading: boolean; error: string; setView: (view: string) => void }) {
   const cards = dashboard?.cards ?? {};
   return (
     <div className="space-y-6">
@@ -636,26 +807,40 @@ function DashboardView({ user, dashboard, setView }: { user: UserSession; dashbo
           </button>
         )}
       </div>
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p className="font-semibold">Dashboard data could not be loaded.</p>
+          <p className="mt-1">{error}</p>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total issues this month" value={cards.totalThisMonth ?? 0} icon={ClipboardList} tone="teal" />
-        <StatCard label="Open issues" value={cards.openIssues ?? 0} icon={Clock} tone="blue" />
-        <StatCard label="Critical issues" value={cards.criticalIssues ?? 0} icon={AlertTriangle} tone="red" />
-        <StatCard label="Pending vendor" value={cards.pendingVendor ?? 0} icon={Truck} tone="amber" />
-        <StatCard label="SLA breached" value={cards.slaBreached ?? 0} icon={AlertTriangle} tone="red" />
-        <StatCard label="Repeated issues" value={cards.repeatedIssues ?? 0} icon={RefreshCw} tone="amber" />
-        <StatCard label="Avg resolution" value={minutesLabel(cards.averageResolutionMinutes)} icon={CheckCircle2} tone="teal" />
-        <StatCard label="ERP Health Score" value={`${cards.erpHealthScore ?? 100}`} icon={Gauge} tone="slate" />
+        {isLoading ? Array.from({ length: 8 }, (_, index) => <StatCardSkeleton key={index} />) : (
+          <>
+            <StatCard label="Total Issues This Month" value={cards.totalThisMonth ?? 0} icon={ClipboardList} tone="teal" />
+            <StatCard label="Open Issues" value={cards.openIssues ?? 0} icon={Clock} tone="blue" />
+            <StatCard label="Critical Issues" value={cards.criticalIssues ?? 0} icon={AlertTriangle} tone="red" />
+            <StatCard label="Pending Vendor" value={cards.pendingVendor ?? 0} icon={Truck} tone="amber" />
+            <StatCard label="SLA Breached" value={cards.slaBreached ?? 0} icon={AlertTriangle} tone="red" />
+            <StatCard label="Average Resolution Time" value={minutesLabel(cards.averageResolutionMinutes)} icon={CheckCircle2} tone="teal" />
+            <StatCard label="Top Affected Department" value={cards.topAffectedDepartment ?? "No issues"} icon={Building2} tone="slate" />
+            <StatCard label="Top ERP Module" value={cards.topErpModule ?? "No issues"} icon={BarChart3} tone="blue" />
+          </>
+        )}
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <ChartPanel title="Issues by Department" data={dashboard?.charts.byDepartment} />
-        <ChartPanel title="Issues by ERP Module" data={dashboard?.charts.byModule} />
-        <ChartPanel title="Issues by Status" data={dashboard?.charts.byStatus} type="pie" />
-        <ChartPanel title="Issues by Priority" data={dashboard?.charts.byPriority} type="pie" />
-        <ChartPanel title="Vendor Pending Ageing" data={dashboard?.charts.vendorAgeing} />
-        <ChartPanel title="Monthly Trend" data={dashboard?.charts.monthlyTrend} type="line" />
-        <ChartPanel title="Root Cause Breakdown" data={dashboard?.charts.rootCause} />
-        <ChartPanel title="Department Business Impact Score" data={dashboard?.charts.departmentImpact} />
-      </div>
+      {isLoading ? (
+        <Panel title="Dashboard charts"><EmptyState title="Loading dashboard" message="The business summary charts are being prepared." /></Panel>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <ChartPanel title="Department Issue Visibility" data={dashboard?.charts.byDepartment} />
+          <ChartPanel title="Top ERP Module Pressure" data={dashboard?.charts.byModule} />
+          <ChartPanel title="Issue Status Mix" data={dashboard?.charts.byStatus} type="pie" />
+          <ChartPanel title="Business Priority Mix" data={dashboard?.charts.byPriority} type="pie" />
+          <ChartPanel title="Vendor Pending Ageing" data={dashboard?.charts.vendorAgeing} />
+          <ChartPanel title="Monthly Issue Trend" data={dashboard?.charts.monthlyTrend} type="line" />
+          <ChartPanel title="Root Cause Breakdown" data={dashboard?.charts.rootCause} />
+          <ChartPanel title="Department Business Impact Score" data={dashboard?.charts.departmentImpact} />
+        </div>
+      )}
     </div>
   );
 }
@@ -827,6 +1012,7 @@ function IssuesView({ issues, reference, user, onOpen }: { issues: Issue[]; refe
 
 function VendorView({ followups, user, reference, onUpdated, onError }: { followups: VendorFollowup[]; user: UserSession; reference: ReferenceData; onUpdated: () => Promise<void>; onError: (message: string) => void }) {
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const canUpdateFollowup = user.permissions.includes("manage_vendor_followup") || user.permissions.includes("add_vendor_note");
   async function updateFollowup(followup: VendorFollowup) {
     try {
       await api("/api/vendor-followups", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ followupId: followup._id, vendorStatus: draft[`status-${followup._id}`] || followup.vendorStatus, vendorResponse: draft[`response-${followup._id}`] || followup.vendorResponse }) });
@@ -856,9 +1042,15 @@ function VendorView({ followups, user, reference, onUpdated, onError }: { follow
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Select compact label="Vendor Status" value={draft[`status-${followup._id}`] || followup.vendorStatus} options={reference.constants.vendorStatuses} onChange={(value) => setDraft({ ...draft, [`status-${followup._id}`]: value })} />
-                  <textarea value={draft[`response-${followup._id}`] ?? followup.vendorResponse ?? ""} onChange={(event) => setDraft({ ...draft, [`response-${followup._id}`]: event.target.value })} className="h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600" placeholder="Vendor response" />
-                  <button onClick={() => updateFollowup(followup)} className="w-full rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800">{user.roleName === "Vendor" ? "Update Vendor Progress" : "Save Follow-up"}</button>
+                  {canUpdateFollowup ? (
+                    <>
+                      <Select compact label="Vendor Status" value={draft[`status-${followup._id}`] || followup.vendorStatus} options={reference.constants.vendorStatuses} onChange={(value) => setDraft({ ...draft, [`status-${followup._id}`]: value })} />
+                      <textarea value={draft[`response-${followup._id}`] ?? followup.vendorResponse ?? ""} onChange={(event) => setDraft({ ...draft, [`response-${followup._id}`]: event.target.value })} className="h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600" placeholder="Vendor response" />
+                      <button onClick={() => updateFollowup(followup)} className="w-full rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800">{user.roleName === "Vendor" ? "Update Vendor Progress" : "Save Follow-up"}</button>
+                    </>
+                  ) : (
+                    <EmptyState icon={ShieldCheck} title="Read-only vendor view" message="Management can monitor pending vendor work without changing vendor follow-up records." />
+                  )}
                 </div>
               </div>
             </Panel>
@@ -974,7 +1166,7 @@ function ImprovementView({ actions, issues, reference, user, onSaved, onError }:
           ))}
         </div>
       </Panel>
-      {(user.permissions.includes("update_status") || user.permissions.includes("view_management_dashboard")) && (
+      {(user.permissions.includes("update_status") || user.permissions.includes("manage_settings")) && (
         <Panel title="New Improvement Action">
           <form onSubmit={submit} className="space-y-3">
             <TextInput label="Improvement Title" value={form.title} required onChange={(value) => setForm({ ...form, title: value })} />
@@ -1001,6 +1193,7 @@ function AdminView({ reference, user, onSaved, onError }: { reference: Reference
       {user.permissions.includes("manage_users") && (
         <UserSetupCard reference={reference} onSaved={onSaved} onError={onError} />
       )}
+      {user.permissions.includes("manage_settings") && <SmtpTestCard user={user} />}
       <Panel title="Current Setup">
         <div className="grid gap-3 md:grid-cols-3">
           <SetupCount label="Users" value={reference.users.length} icon={Users} />
@@ -1012,17 +1205,79 @@ function AdminView({ reference, user, onSaved, onError }: { reference: Reference
   );
 }
 
+function SmtpTestCard({ user }: { user: UserSession }) {
+  const [to, setTo] = useState(user.email);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState("");
+
+  async function sendTest(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setResult("");
+    try {
+      const response = await api<{ result: { ok: boolean; message: string } }>("/api/admin/email-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to,
+          subject: "Nelna ERP Support SMTP test",
+          body: "This is a test email from the Nelna ERP Support & Improvement System.",
+        }),
+      });
+      setResult(response.result.ok ? "Test email sent successfully." : response.result.message);
+    } catch (err) {
+      setResult(friendlyErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel title="SMTP Email Test">
+      <form onSubmit={sendTest} className="space-y-3">
+        <TextInput label="Recipient Email" value={to} required onChange={setTo} />
+        <button disabled={busy} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60">
+          <MailCheck className="h-4 w-4" /> {busy ? "Sending..." : "Send test email"}
+        </button>
+        {result && <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{result}</p>}
+      </form>
+    </Panel>
+  );
+}
+
 function AuditView({ auditLogs, emailLogs }: { auditLogs: Array<Record<string, unknown>>; emailLogs: Array<Record<string, unknown>> }) {
+  const [filters, setFilters] = useState({ action: "", user: "", issue: "", date: "" });
+  const actionOptions = useMemo(() => Array.from(new Set(auditLogs.map((log) => String(log.action ?? "")).filter(Boolean))).sort(), [auditLogs]);
+  const userOptions = useMemo(() => Array.from(new Set(auditLogs.map((log) => entityLabel(log.performedBy as EntityRef | string | undefined, "System")).filter(Boolean))).sort(), [auditLogs]);
+  const filteredAuditLogs = auditLogs.filter((log) => {
+    const action = String(log.action ?? "");
+    const entityId = String(log.entityId ?? "");
+    const userName = entityLabel(log.performedBy as EntityRef | string | undefined, "System");
+    const performedDate = String(log.performedAt ?? "").slice(0, 10);
+    if (filters.action && action !== filters.action) return false;
+    if (filters.user && userName !== filters.user) return false;
+    if (filters.issue && !entityId.toLowerCase().includes(filters.issue.toLowerCase())) return false;
+    if (filters.date && performedDate !== filters.date) return false;
+    return true;
+  });
+
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <Panel title="Audit Trail">
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          <Select compact label="Action" value={filters.action} options={actionOptions} onChange={(value) => setFilters({ ...filters, action: value })} />
+          <Select compact label="User" value={filters.user} options={userOptions} onChange={(value) => setFilters({ ...filters, user: value })} />
+          <TextInput label="Issue or Entity" value={filters.issue} onChange={(value) => setFilters({ ...filters, issue: value })} />
+          <TextInput label="Date" type="date" value={filters.date} onChange={(value) => setFilters({ ...filters, date: value })} />
+        </div>
         <div className="max-h-170 space-y-2 overflow-auto">
-          {auditLogs.map((log) => (
+          {filteredAuditLogs.map((log) => (
             <div key={String(log._id)} className="rounded-lg border border-slate-200 p-3 text-sm">
               <p className="font-semibold text-slate-950">{String(log.action)}</p>
-              <p className="text-slate-500">{String(log.entityType)} - {String(log.entityId)} - {dateLabel(String(log.performedAt))}</p>
+              <p className="text-slate-500">{String(log.entityType)} - {String(log.entityId)} - {entityLabel(log.performedBy as EntityRef | string | undefined, "System")} - {dateLabel(String(log.performedAt))}</p>
             </div>
           ))}
+          {!filteredAuditLogs.length && <EmptyState icon={ShieldCheck} title="No audit logs match" message="Adjust the filters to review system activity." />}
         </div>
       </Panel>
       <Panel title="Email Logs">
@@ -1063,7 +1318,8 @@ function IssueDetailModal({ detail, issue, reference, user, onClose, onChanged, 
     } catch (err) { onError(err instanceof Error ? err.message : "Something went wrong. Please try again."); }
   }
 
-  const canUpdate = user.permissions.includes("update_status") || user.permissions.includes("assign_issue") || user.permissions.includes("view_management_dashboard") || getEntityId(activeIssue.reportedBy) === user.id;
+  const canUpdate = user.permissions.includes("update_status") || user.permissions.includes("assign_issue") || getEntityId(activeIssue.reportedBy) === user.id;
+  const canComment = user.permissions.includes("add_comment");
 
   return (
     <div className="fixed inset-0 z-40 bg-slate-950/40 p-3 backdrop-blur-sm md:p-6">
@@ -1102,13 +1358,17 @@ function IssueDetailModal({ detail, issue, reference, user, onClose, onChanged, 
                       <p className="mt-2 text-xs font-semibold text-slate-500">{item.commentType}</p>
                     </div>
                   ))}
-                  <div className="rounded-lg border border-slate-200 p-3">
-                    <textarea value={comment} onChange={(event) => setComment(event.target.value)} className="h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600" placeholder="Add a comment or support update" />
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                      {user.permissions.includes("add_internal_note") && <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={internal} onChange={(event) => setInternal(event.target.checked)} /> Internal note</label>}
-                      <button onClick={addComment} className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800"><MessageSquare className="h-4 w-4" /> Add Comment</button>
+                  {canComment ? (
+                    <div className="rounded-lg border border-slate-200 p-3">
+                      <textarea value={comment} onChange={(event) => setComment(event.target.value)} className="h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600" placeholder="Add a comment or support update" />
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        {user.permissions.includes("add_internal_note") && <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={internal} onChange={(event) => setInternal(event.target.checked)} /> Internal note</label>}
+                        <button onClick={addComment} className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800"><MessageSquare className="h-4 w-4" /> Add Comment</button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <EmptyState icon={ShieldCheck} title="Read-only access" message="This role can review the issue history but cannot add comments or change issue details." />
+                  )}
                 </div>
               </Panel>
               <Panel title="Attachments and Vendor Follow-up">

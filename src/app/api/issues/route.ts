@@ -11,9 +11,23 @@ import { generateIssueId } from "@/lib/issue-id";
 import { saveIssueAttachment } from "@/lib/files";
 import { createAuditLog } from "@/lib/audit";
 import { sendIssueEmail } from "@/lib/email";
+import { cleanText, objectIdField, optionalDateField, requiredText, validateInput, z } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const createIssueSchema = z.object({
+  requestType: requiredText("Request type", 120),
+  departmentId: objectIdField("Department"),
+  erpModuleId: objectIdField("ERP module"),
+  title: requiredText("Issue title", 160),
+  description: requiredText("Description", 3000),
+  businessImpact: requiredText("Business impact", 220),
+  erpScreen: cleanText(160),
+  documentNumber: cleanText(160),
+  neededBeforeDate: optionalDateField("Needed before date"),
+  contactNumber: cleanText(60),
+});
 
 export async function GET(request: NextRequest) {
   try {
@@ -64,47 +78,34 @@ export async function POST(request: NextRequest) {
       data = await request.json();
     }
 
-    const requestType = sanitizeText(data.requestType, 120);
-    const departmentId = sanitizeText(data.departmentId, 80);
-    const erpModuleId = sanitizeText(data.erpModuleId, 80);
-    const title = sanitizeText(data.title, 160);
-    const description = sanitizeText(data.description, 3000);
-    const businessImpact = sanitizeText(data.businessImpact, 220);
-
-    if (!requestType || !departmentId || !erpModuleId || !title || !description || !businessImpact) {
-      throw new ApiError("Please fill all required fields.", 400);
-    }
-
-    if (!isObjectId(departmentId) || !isObjectId(erpModuleId)) {
-      throw new ApiError("Invalid department or ERP module selected.", 400);
-    }
+    const input = validateInput(createIssueSchema, data);
 
     const createdAt = new Date();
-    const priority = priorityFromImpact(businessImpact);
+    const priority = priorityFromImpact(input.businessImpact);
     const sla = calculateSla(priority, createdAt);
     const issueId = await generateIssueId();
     const defaultAssignee = await User.findOne({ isActive: true }).populate({ path: "roleId", match: { roleName: "IT Support" } }).lean();
 
     const issue = await Issue.create({
       issueId,
-      requestType,
-      title,
-      description,
-      departmentId,
-      erpModuleId,
-      issueType: requestType,
-      businessImpact,
+      requestType: input.requestType,
+      title: input.title,
+      description: input.description,
+      departmentId: input.departmentId,
+      erpModuleId: input.erpModuleId,
+      issueType: input.requestType,
+      businessImpact: input.businessImpact,
       priority,
       status: "New",
       reportedBy: user.id,
       assignedTo: defaultAssignee?.roleId ? toId(defaultAssignee._id) : undefined,
       ackDueAt: sla.ackDueAt,
       slaDueAt: sla.slaDueAt,
-      erpScreen: sanitizeText(data.erpScreen, 160),
-      documentNumber: sanitizeText(data.documentNumber, 160),
-      neededBeforeDate: sanitizeText(data.neededBeforeDate, 60) ? new Date(String(data.neededBeforeDate)) : undefined,
-      contactNumber: sanitizeText(data.contactNumber, 60),
-      recurrenceKey: `${title.toLowerCase()}-${erpModuleId}`,
+      erpScreen: input.erpScreen,
+      documentNumber: input.documentNumber,
+      neededBeforeDate: input.neededBeforeDate,
+      contactNumber: input.contactNumber,
+      recurrenceKey: `${input.title.toLowerCase()}-${input.erpModuleId}`,
       createdAt,
     });
 
@@ -115,15 +116,15 @@ export async function POST(request: NextRequest) {
         const attachment = await saveIssueAttachment(attachmentFile, issueId);
         attachmentLink = attachment.fileUrl;
         await Attachment.create({ ...attachment, issueId: issue._id, uploadedBy: user.id });
-        await createAuditLog({ entityType: "Issue", entityId: toId(issue._id), action: "Attachment uploaded", performedBy: user.id, request, newValue: attachment });
+        await createAuditLog({ entityType: "Issue", entityId: toId(issue._id), action: "Attachment added", performedBy: user.id, request, newValue: attachment });
       } catch (error) {
         attachmentError = error instanceof Error ? error.message : "Attachment upload failed. You can submit the issue without attachment.";
       }
     }
 
     const [department, erpModule, reporter] = await Promise.all([
-      Department.findById(departmentId).lean(),
-      ErpModule.findById(erpModuleId).lean(),
+      Department.findById(input.departmentId).lean(),
+      ErpModule.findById(input.erpModuleId).lean(),
       User.findById(user.id).lean(),
     ]);
 

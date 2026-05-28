@@ -33,6 +33,15 @@ function createTransporter() {
   });
 }
 
+function senderAddress() {
+  return process.env.SMTP_FROM || process.env.EMAIL_FROM || "Nelna ERP Support <erp-support@nelna.local>";
+}
+
+function issueLink(issueId: string) {
+  const appUrl = process.env.APP_URL?.replace(/\/$/, "");
+  return appUrl ? `${appUrl}/?issue=${encodeURIComponent(issueId)}` : "Login to the Nelna ERP Support & Improvement System to view this issue.";
+}
+
 export function buildIssueEmail(input: IssueEmailInput) {
   const { issue, departmentName, moduleName, reportedByName, reportedByEmail } = input;
   const issueId = String(issue.issueId);
@@ -45,10 +54,12 @@ export function buildIssueEmail(input: IssueEmailInput) {
     `Request Type: ${String(issue.requestType)}`,
     `Priority: ${String(issue.priority)}`,
     `Business Impact: ${String(issue.businessImpact)}`,
+    `Current Status: ${String(issue.status)}`,
+    `Reporter: ${reportedByName}`,
+    `Created Date and Time: ${new Date(String(issue.createdAt ?? Date.now())).toLocaleString()}`,
+    `Issue Link: ${issueLink(issueId)}`,
     `Description: ${String(issue.description)}`,
     `Attachment link: ${String(issue.attachmentLink ?? "Not attached")}`,
-    `Current Status: ${String(issue.status)}`,
-    `Created Date and Time: ${new Date(String(issue.createdAt ?? Date.now())).toLocaleString()}`,
     "Required Action: Please review, acknowledge, and assign ownership in the Nelna ERP Support & Improvement System.",
   ].join("\n");
 
@@ -75,7 +86,7 @@ export async function sendIssueEmail(input: IssueEmailInput) {
 
   try {
     await createTransporter().sendMail({
-      from: process.env.EMAIL_FROM || "Nelna ERP Support <erp-support@nelna.local>",
+      from: senderAddress(),
       to,
       subject,
       text: body,
@@ -130,7 +141,7 @@ export async function sendLoggedEmail(input: {
 
   try {
     await createTransporter().sendMail({
-      from: process.env.EMAIL_FROM || "Nelna ERP Support <erp-support@nelna.local>",
+      from: senderAddress(),
       to: input.to,
       cc: input.cc,
       subject: input.subject,

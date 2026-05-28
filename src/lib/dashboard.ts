@@ -25,6 +25,11 @@ function averageMinutes(values: Array<number | null>) {
   return Math.round(usable.reduce((sum, value) => sum + value, 0) / usable.length);
 }
 
+function topGroupLabel(values: Array<{ name: string; value: number }>, fallback = "No issues") {
+  const top = [...values].sort((left, right) => right.value - left.value)[0];
+  return top && top.value > 0 ? `${top.name} (${top.value})` : fallback;
+}
+
 export function buildDashboard(issues: AnyIssue[], userId?: string) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -44,6 +49,8 @@ export function buildDashboard(issues: AnyIssue[], userId?: string) {
   const averageAck = averageMinutes(issues.map((issue) => minutesBetween(issue.createdAt as string, issue.acknowledgedAt as string)));
   const averageResolution = averageMinutes(issues.map((issue) => minutesBetween(issue.createdAt as string, issue.resolvedAt as string)));
   const health = getErpHealthScore(monthIssues);
+  const byDepartment = groupByName(issues, "departmentId", "Department");
+  const byModule = groupByName(issues, "erpModuleId", "ERP Module");
 
   return {
     cards: {
@@ -60,13 +67,15 @@ export function buildDashboard(issues: AnyIssue[], userId?: string) {
       repeatedIssues: repeatedIssues.length,
       averageAckMinutes: averageAck,
       averageResolutionMinutes: averageResolution,
+      topAffectedDepartment: topGroupLabel(byDepartment),
+      topErpModule: topGroupLabel(byModule),
       trainingNeeds: trainingNeeds.length,
       erpHealthScore: health.score,
       erpHealthLabel: health.label,
     },
     charts: {
-      byDepartment: groupByName(issues, "departmentId", "Department"),
-      byModule: groupByName(issues, "erpModuleId", "ERP Module"),
+      byDepartment,
+      byModule,
       byStatus: groupByName(issues, "status", "Status"),
       byPriority: groupByName(issues, "priority", "Priority"),
       rootCause: groupByName(issues, "rootCause", "Unknown"),

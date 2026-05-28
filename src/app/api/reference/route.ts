@@ -3,6 +3,7 @@ import { fail, ok } from "@/lib/api";
 import { requireAuth } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
 import { Department, ErpModule, KnowledgeBase, Role, SlaRule, User, Vendor } from "@/lib/models";
+import { hasPermission } from "@/lib/permissions";
 import {
   BUSINESS_IMPACT_OPTIONS,
   IMPROVEMENT_ACTION_STATUSES,
@@ -21,14 +22,16 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request);
+    const user = await requireAuth(request);
     await connectToDatabase();
+    const canViewUserDirectory = hasPermission(user, "assign_issue") || hasPermission(user, "manage_users") || hasPermission(user, "manage_vendor_followup") || hasPermission(user, "view_all_issues");
+    const canViewRoles = hasPermission(user, "manage_users") || hasPermission(user, "manage_settings");
     const [departments, erpModules, vendors, users, roles, slaRules, knowledgeBase] = await Promise.all([
       Department.find({ isActive: true }).sort({ name: 1 }).lean(),
       ErpModule.find({ isActive: true }).sort({ moduleName: 1 }).lean(),
       Vendor.find({ isActive: true }).sort({ vendorName: 1 }).lean(),
-      User.find({ isActive: true }).select("-passwordHash").sort({ name: 1 }).populate({ path: "roleId", select: "roleName" }).lean(),
-      Role.find({}).sort({ roleName: 1 }).lean(),
+      canViewUserDirectory ? User.find({ isActive: true }).select("-passwordHash").sort({ name: 1 }).populate({ path: "roleId", select: "roleName" }).lean() : Promise.resolve([]),
+      canViewRoles ? Role.find({}).sort({ roleName: 1 }).lean() : Promise.resolve([]),
       SlaRule.find({ isActive: true }).sort({ resolveHours: 1 }).lean(),
       KnowledgeBase.find({}).sort({ updatedAt: -1 }).populate({ path: "erpModuleId", select: "moduleName" }).limit(50).lean(),
     ]);

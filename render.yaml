@@ -3,7 +3,7 @@ services:
     name: nelna-erp-support
     runtime: node
     plan: starter
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm install && npm run build
     startCommand: npm run start
     envVars:
       - key: NODE_VERSION
@@ -16,6 +16,10 @@ services:
         sync: false
       - key: APP_URL
         sync: false
+      - key: NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS
+        value: "false"
+      - key: FILE_STORAGE_DRIVER
+        value: local
       - key: DEFAULT_ADMIN_NAME
         value: Super Admin
       - key: DEFAULT_ADMIN_EMAIL
@@ -27,6 +31,8 @@ services:
       - key: DEFAULT_IT_EMAILS
         value: pathum@nelna.local,sampath@nelna.local,rusith@nelna.local,chinthaka@nelna.local
       - key: EMAIL_FROM
+        value: Nelna ERP Support <erp-support@nelna.local>
+      - key: SMTP_FROM
         value: Nelna ERP Support <erp-support@nelna.local>
       - key: SMTP_HOST
         sync: false

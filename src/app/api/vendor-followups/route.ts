@@ -6,11 +6,31 @@ import { Issue, VendorFollowup } from "@/lib/models";
 import { canAccessIssue, hasPermission, visibleIssueFilter } from "@/lib/permissions";
 import { issuePopulate } from "@/lib/queries";
 import { getPendingDays } from "@/lib/sla";
-import { isObjectId, sanitizeText, serialize, toId } from "@/lib/utils";
+import { serialize, toId } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { objectIdField, optionalDateField, optionalText, validateInput, z } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const createVendorFollowupSchema = z.object({
+  issueId: objectIdField("Issue"),
+  vendorId: objectIdField("Vendor"),
+  vendorStatus: optionalText(80),
+  sentDate: optionalDateField("Sent date"),
+  lastFollowupDate: optionalDateField("Last follow-up date"),
+  nextFollowupDate: optionalDateField("Next follow-up date"),
+  vendorResponse: optionalText(3000),
+  internalNote: optionalText(3000),
+});
+
+const updateVendorFollowupSchema = z.object({
+  followupId: objectIdField("Follow-up"),
+  vendorStatus: optionalText(80),
+  vendorResponse: optionalText(3000),
+  internalNote: optionalText(3000),
+  nextFollowupDate: optionalDateField("Next follow-up date"),
+});
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,22 +52,20 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request, "manage_vendor_followup");
     await connectToDatabase();
-    const body = await request.json();
-    const issueId = sanitizeText(body.issueId, 80);
-    const vendorId = sanitizeText(body.vendorId, 80);
-    if (!isObjectId(issueId) || !isObjectId(vendorId)) throw new ApiError("Invalid issue or vendor selected.", 400);
+    const body = validateInput(createVendorFollowupSchema, await request.json());
+    const { issueId, vendorId } = body;
     const issue = await Issue.findById(issueId).lean();
     if (!issue || !canAccessIssue(user, issue)) throw new ApiError("You do not have permission to access this page.", 403);
     const now = new Date();
     const saved = await VendorFollowup.create({
       issueId,
       vendorId,
-      vendorStatus: sanitizeText(body.vendorStatus, 80) || "Sent to Vendor",
-      sentDate: body.sentDate ? new Date(String(body.sentDate)) : now,
-      lastFollowupDate: body.lastFollowupDate ? new Date(String(body.lastFollowupDate)) : now,
-      nextFollowupDate: body.nextFollowupDate ? new Date(String(body.nextFollowupDate)) : undefined,
-      vendorResponse: sanitizeText(body.vendorResponse, 3000),
-      internalNote: sanitizeText(body.internalNote, 3000),
+      vendorStatus: body.vendorStatus || "Sent to Vendor",
+      sentDate: body.sentDate ?? now,
+      lastFollowupDate: body.lastFollowupDate ?? now,
+      nextFollowupDate: body.nextFollowupDate,
+      vendorResponse: body.vendorResponse ?? "",
+      internalNote: body.internalNote ?? "",
       pendingDays: getPendingDays(now),
       createdBy: user.id,
     });
@@ -63,9 +81,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const user = await requireAuth(request);
     await connectToDatabase();
-    const body = await request.json();
-    const followupId = sanitizeText(body.followupId, 80);
-    if (!isObjectId(followupId)) throw new ApiError("Invalid follow-up selected.", 400);
+    const body = validateInput(updateVendorFollowupSchema, await request.json());
+    const followupId = body.followupId;
     const current = await VendorFollowup.findById(followupId).lean();
     if (!current) throw new ApiError("Vendor follow-up not found.", 404);
     const issue = await Issue.findById(current.issueId).lean();
@@ -74,11 +91,11 @@ export async function PATCH(request: NextRequest) {
       throw new ApiError("You do not have permission to access this page.", 403);
     }
     const updates = {
-      vendorStatus: sanitizeText(body.vendorStatus, 80) || current.vendorStatus,
-      vendorResponse: sanitizeText(body.vendorResponse, 3000) || current.vendorResponse,
-      internalNote: hasPermission(user, "manage_vendor_followup") ? sanitizeText(body.internalNote, 3000) || current.internalNote : current.internalNote,
+      vendorStatus: body.vendorStatus || current.vendorStatus,
+      vendorResponse: body.vendorResponse || current.vendorResponse,
+      internalNote: hasPermission(user, "manage_vendor_followup") ? body.internalNote || current.internalNote : current.internalNote,
       lastFollowupDate: new Date(),
-      nextFollowupDate: body.nextFollowupDate ? new Date(String(body.nextFollowupDate)) : current.nextFollowupDate,
+      nextFollowupDate: body.nextFollowupDate ?? current.nextFollowupDate,
       pendingDays: getPendingDays(current.sentDate as Date),
     };
     const updated = await VendorFollowup.findByIdAndUpdate(followupId, { $set: updates }, { returnDocument: "after" }).populate({ path: "vendorId", select: "vendorName contactPerson email" }).lean();

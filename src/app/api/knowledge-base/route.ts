@@ -4,27 +4,37 @@ import { ApiError, requireAuth } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
 import { KnowledgeBase } from "@/lib/models";
 import { hasPermission } from "@/lib/permissions";
-import { isObjectId, sanitizeText, serialize } from "@/lib/utils";
+import { serialize } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { optionalObjectIdField, optionalText, objectIdField, requiredText, validateInput, z } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const knowledgeBaseSchema = z.object({
+  title: requiredText("Title", 160),
+  erpModuleId: objectIdField("ERP module"),
+  issueType: requiredText("Issue type", 140),
+  problem: requiredText("Problem", 3000),
+  solution: requiredText("Solution", 5000),
+  visibility: optionalText(80),
+  departmentId: optionalObjectIdField("Department"),
+});
 
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
     if (!hasPermission(user, "update_status")) throw new ApiError("You do not have permission to access this page.", 403);
     await connectToDatabase();
-    const body = await request.json();
-    if (!isObjectId(String(body.erpModuleId))) throw new ApiError("Please select a valid ERP module.", 400);
+    const body = validateInput(knowledgeBaseSchema, await request.json());
     const saved = await KnowledgeBase.create({
-      title: sanitizeText(body.title, 160),
+      title: body.title,
       erpModuleId: body.erpModuleId,
-      issueType: sanitizeText(body.issueType, 140),
-      problem: sanitizeText(body.problem, 3000),
-      solution: sanitizeText(body.solution, 5000),
-      visibility: sanitizeText(body.visibility, 80) || "Staff",
-      departmentId: isObjectId(String(body.departmentId)) ? body.departmentId : undefined,
+      issueType: body.issueType,
+      problem: body.problem,
+      solution: body.solution,
+      visibility: body.visibility || "Staff",
+      departmentId: body.departmentId,
       createdBy: user.id,
     });
     await createAuditLog({ entityType: "KnowledgeBase", entityId: String(saved._id), action: "Knowledge base article created", performedBy: user.id, request, newValue: saved });

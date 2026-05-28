@@ -5,12 +5,40 @@ import { connectToDatabase } from "@/lib/db";
 import { Attachment, Issue, IssueComment, User, VendorFollowup } from "@/lib/models";
 import { canAccessIssue, hasPermission } from "@/lib/permissions";
 import { findIssueByIdentity, issueIdentityFilter, issuePopulate } from "@/lib/queries";
-import { isObjectId, sanitizeText, serialize, toId } from "@/lib/utils";
+import { isObjectId, serialize, toId } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 import { sendLoggedEmail } from "@/lib/email";
+import { optionalBooleanField, optionalNumberField, optionalText, validateInput, z } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const updateIssueSchema = z.object({
+  isDeleted: optionalBooleanField(),
+  status: optionalText(80),
+  priority: optionalText(80),
+  assignedTo: optionalText(80).refine((value) => value === undefined || !value || isObjectId(value), { message: "Invalid assignee selected." }),
+  vendorRequired: optionalBooleanField(),
+  vendorId: optionalText(80).refine((value) => value === undefined || !value || isObjectId(value), { message: "Invalid vendor selected." }),
+  rootCause: optionalText(2500),
+  preventiveAction: optionalText(2500),
+  solutionNote: optionalText(2500),
+  isRepeated: optionalBooleanField(),
+  managementRemark: optionalText(2500),
+  satisfactionScore: optionalNumberField("Satisfaction score"),
+});
+
+function issueAuditAction(updates: Record<string, unknown>) {
+  if (updates.isDeleted) return "Issue soft deleted";
+  if (updates.assignedTo !== undefined) return "Assignment changed";
+  if (updates.priority !== undefined) return "Priority changed";
+  if (updates.vendorRequired !== undefined || updates.vendorId !== undefined) return "Vendor status changed";
+  if (updates.status === "Resolved") return "Issue resolved";
+  if (updates.status === "Closed") return "Issue closed";
+  if (updates.status === "Reopened") return "Issue reopened";
+  if (updates.status !== undefined) return "Status changed";
+  return "Issue updated";
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -42,7 +70,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const user = await requireAuth(request);
     await connectToDatabase();
     const { id } = await params;
-    const body = await request.json();
+    const body = validateInput(updateIssueSchema, await request.json());
     const current = await Issue.findOne(issueIdentityFilter(id)).lean();
     if (!current || !canAccessIssue(user, current)) {
       throw new ApiError("You do not have permission to access this page.", 403);
@@ -56,8 +84,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updates.isDeleted = true;
     }
 
-    if (typeof body.status === "string" && body.status !== current.status) {
-      const requestedStatus = sanitizeText(body.status, 80);
+    if (body.status !== undefined && body.status !== current.status) {
+      const requestedStatus = body.status;
       const selfClose = toId(current.reportedBy) === user.id && ["Closed", "Reopened"].includes(requestedStatus);
       if (!hasPermission(user, "update_status") && !selfClose) {
         throw new ApiError("You do not have permission to access this page.", 403);
@@ -69,41 +97,43 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (requestedStatus === "Reopened") updates.reopenedAt = now;
     }
 
-    if (typeof body.priority === "string" && body.priority !== current.priority) {
+    if (body.priority !== undefined && body.priority !== current.priority) {
       if (!hasPermission(user, "update_status")) throw new ApiError("You do not have permission to access this page.", 403);
-      updates.priority = sanitizeText(body.priority, 80);
+      updates.priority = body.priority;
     }
 
-    if (typeof body.assignedTo === "string") {
+    if (body.assignedTo !== undefined && body.assignedTo !== toId(current.assignedTo)) {
       if (!hasPermission(user, "assign_issue")) throw new ApiError("You do not have permission to access this page.", 403);
       updates.assignedTo = isObjectId(body.assignedTo) ? body.assignedTo : undefined;
       if (!updates.status && current.status === "New") updates.status = "Assigned";
     }
 
-    if (typeof body.vendorRequired === "boolean" || typeof body.vendorId === "string") {
+    const vendorRequiredChanged = body.vendorRequired !== undefined && body.vendorRequired !== Boolean(current.vendorRequired);
+    const vendorIdChanged = body.vendorId !== undefined && body.vendorId !== toId(current.vendorId);
+    if (vendorRequiredChanged || vendorIdChanged) {
       if (!hasPermission(user, "manage_vendor_followup") && !hasPermission(user, "update_status")) {
         throw new ApiError("You do not have permission to access this page.", 403);
       }
-      if (typeof body.vendorRequired === "boolean") updates.vendorRequired = body.vendorRequired;
-      if (typeof body.vendorId === "string") updates.vendorId = isObjectId(body.vendorId) ? body.vendorId : undefined;
+      if (vendorRequiredChanged) updates.vendorRequired = body.vendorRequired;
+      if (vendorIdChanged) updates.vendorId = body.vendorId && isObjectId(body.vendorId) ? body.vendorId : undefined;
       if (body.vendorRequired === true) updates.status = "Pending Vendor";
     }
 
     for (const field of ["rootCause", "preventiveAction", "solutionNote"] as const) {
-      if (typeof body[field] === "string") {
+      if (body[field] !== undefined && body[field] !== String(current[field] ?? "")) {
         if (!hasPermission(user, "update_status")) throw new ApiError("You do not have permission to access this page.", 403);
-        updates[field] = sanitizeText(body[field], 2500);
+        updates[field] = body[field];
       }
     }
 
-    if (typeof body.isRepeated === "boolean") {
+    if (body.isRepeated !== undefined && body.isRepeated !== Boolean(current.isRepeated)) {
       if (!hasPermission(user, "update_status")) throw new ApiError("You do not have permission to access this page.", 403);
       updates.isRepeated = body.isRepeated;
     }
 
-    if (typeof body.managementRemark === "string") {
-      if (!hasPermission(user, "view_management_dashboard")) throw new ApiError("You do not have permission to access this page.", 403);
-      updates.managementRemark = sanitizeText(body.managementRemark, 2500);
+    if (body.managementRemark !== undefined && body.managementRemark !== String(current.managementRemark ?? "")) {
+      if (!hasPermission(user, "update_status")) throw new ApiError("You do not have permission to access this page.", 403);
+      updates.managementRemark = body.managementRemark;
     }
 
     if (typeof body.satisfactionScore === "number" && toId(current.reportedBy) === user.id) {
@@ -127,7 +157,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     await createAuditLog({
       entityType: "Issue",
       entityId: toId(current._id),
-      action: updates.isDeleted ? "Issue soft deleted" : updates.status ? "Status changed" : "Issue updated",
+      action: issueAuditAction(updates),
       oldValue: current,
       newValue: updates,
       performedBy: user.id,

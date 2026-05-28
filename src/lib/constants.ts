@@ -42,7 +42,6 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ],
   Manager: [
     "view_all_issues",
-    "add_comment",
     "view_dashboard",
     "view_management_dashboard",
     "export_reports",

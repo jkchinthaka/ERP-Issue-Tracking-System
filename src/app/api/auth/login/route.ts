@@ -3,27 +3,33 @@ import { connectToDatabase } from "@/lib/db";
 import { Role, User } from "@/lib/models";
 import { fail } from "@/lib/api";
 import { SESSION_COOKIE, signSession, verifyPassword } from "@/lib/auth";
-import { sanitizeText, toId } from "@/lib/utils";
+import { clearLoginFailures, assertLoginAllowed, loginRateLimitKey, recordLoginFailure } from "@/lib/rate-limit";
+import { toId } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { emailField, passwordField, validateInput, z } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const loginSchema = z.object({
+  email: emailField(),
+  password: passwordField(),
+});
+
 export async function POST(request: NextRequest) {
   try {
     await connectToDatabase();
-    const body = await request.json();
-    const email = sanitizeText(body.email, 180).toLowerCase();
-    const password = typeof body.password === "string" ? body.password : "";
-
-    if (!email || !password) {
-      return NextResponse.json({ message: "Please enter email and password." }, { status: 400 });
-    }
+    const { email, password } = validateInput(loginSchema, await request.json());
+    const rateLimitKey = loginRateLimitKey(request, email);
+    assertLoginAllowed(rateLimitKey);
 
     const user = await User.findOne({ email, isActive: true }).lean();
     if (!user || !(await verifyPassword(password, String(user.passwordHash)))) {
+      recordLoginFailure(rateLimitKey);
       return NextResponse.json({ message: "Invalid email or password." }, { status: 401 });
     }
+
+    clearLoginFailures(rateLimitKey);
 
     const role = await Role.findById(user.roleId).lean();
     await createAuditLog({
