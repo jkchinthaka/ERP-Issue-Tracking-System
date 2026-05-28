@@ -57,9 +57,10 @@ async function upsertUser(input: {
     permissions: [],
     isActive: true,
   };
+  const passwordHash = await hashPassword(input.password);
 
-  if (existing) return User.findByIdAndUpdate(existing._id, { $set: payload }, { returnDocument: "after" });
-  return User.create({ ...payload, passwordHash: await hashPassword(input.password) });
+  if (existing) return User.findByIdAndUpdate(existing._id, { $set: { ...payload, passwordHash } }, { returnDocument: "after" });
+  return User.create({ ...payload, passwordHash });
 }
 
 async function main() {

@@ -387,9 +387,13 @@ export default function ERPApplication() {
   useEffect(() => {
     async function boot() {
       try {
-        const session = await api<{ user: UserSession }>("/api/auth/me");
-        setUser(session.user);
-        await loadWorkspace(session.user);
+        const session = await api<{ user: UserSession | null }>("/api/auth/me");
+        if (session.user) {
+          setUser(session.user);
+          await loadWorkspace(session.user);
+        } else {
+          setUser(null);
+        }
       } catch {
         setUser(null);
       } finally {
@@ -533,7 +537,8 @@ function LoginScreen({ onLogin }: { onLogin: (user: UserSession) => Promise<void
     setError("");
     try {
       await api("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
-      const session = await api<{ user: UserSession }>("/api/auth/me");
+      const session = await api<{ user: UserSession | null }>("/api/auth/me");
+      if (!session.user) throw new Error("Session expired. Please login again.");
       await onLogin(session.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Session expired. Please login again.");
